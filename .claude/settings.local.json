@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(brew install:*)",
+      "Bash(npm create:*)",
+      "Bash(node scripts/import-xlsx.mjs)",
+      "Bash(node -e \":*)",
+      "Bash(node scripts/recalculate.mjs)",
+      "Bash(node scripts/seed-historical.mjs)",
+      "Bash(npx vite:*)"
+    ]
+  }
+}
