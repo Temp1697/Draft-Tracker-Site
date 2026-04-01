@@ -856,17 +856,26 @@ export default function ScoutingCard() {
         supabase.from('player_injuries').select('*').eq('player_id', playerId).order('injury_date', { ascending: false }),
       ])
 
-      // Load positional defaults and compute which fields are estimated
+      // Load positional defaults and fill NULL values for display
       let estimatedFields = []
+      let filledStats = stats || []
+      let filledMeasurables = measurables
       try {
         const defaults = await getPositionalDefaults()
         const bucket = player?.primary_bucket
         const currentStats = stats?.[0] || null
-        const { estimatedFields: ef } = fillDefaultsSync(currentStats, measurables, bucket, defaults)
+        const { stats: fs, measurables: fm, estimatedFields: ef } = fillDefaultsSync(currentStats, measurables, bucket, defaults)
         estimatedFields = ef
+        // Replace the first (current) stats entry with filled version
+        if (stats && stats.length > 0) {
+          filledStats = [fs, ...stats.slice(1)]
+        } else if (Object.keys(fs).length > 0) {
+          filledStats = [fs]
+        }
+        filledMeasurables = fm
       } catch { /* defaults table may not exist yet */ }
 
-      setData({ player, prospect, raus, ssa, ssaInput, athletic, measurables, master, dna, stats: stats || [], alerts: alerts || [], derived, comps: comps || [], injuries: injuries || [], estimatedFields })
+      setData({ player, prospect, raus, ssa, ssaInput, athletic, measurables: filledMeasurables, master, dna, stats: filledStats, alerts: alerts || [], derived, comps: comps || [], injuries: injuries || [], estimatedFields })
       setLoading(false)
     }
     load()
