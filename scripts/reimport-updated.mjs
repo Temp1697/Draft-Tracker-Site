@@ -89,6 +89,7 @@ async function upsertBatch(table, rows, conflictCol = 'player_id', batchSize = 5
 // Track existing vs new players
 // ---------------------------------------------------------------------------
 let existingPlayerIds = new Set()
+let playerBucketMap = new Map()
 let newPlayerCount = 0
 let updatedPlayerCount = 0
 
@@ -122,6 +123,7 @@ async function importPlayers() {
   }
 
   await upsertBatch('players', rows)
+  playerBucketMap = new Map(rows.map(r => [r.player_id, r.primary_bucket]))
   return new Set(rows.map(r => r.player_id))
 }
 
@@ -300,14 +302,25 @@ async function importMeasurables(validIds) {
   const raw = cleanRows(readSheet('Measurables').map(r => ({ ...r, player_id: r.Player_ID || r.player_id })))
   const filtered = raw.filter(r => validIds.has(str(r.player_id)))
 
-  const rows = filtered.map(r => ({
-    player_id: str(r.player_id),
-    height: num(r.Height),
-    weight: num(r.Weight),
-    wingspan: num(r.Wingspan),
-    standing_reach: num(r.Standing_Reach),
-    ws_minus_h: num(r.WS_minus_H),
-  }))
+  const WS_H_DEFAULTS = { Guard: 2.5, Wing: 3.0, Big: 3.5 }
+  const rows = filtered.map(r => {
+    const wingspan = num(r.Wingspan)
+    const height = num(r.Height)
+    let wsMinusH = num(r.WS_minus_H)
+    // If ws_minus_h is negative or null and wingspan is missing, use positional default
+    if ((wsMinusH == null || wsMinusH < 0) && wingspan == null) {
+      const bucket = playerBucketMap?.get(str(r.player_id))
+      wsMinusH = WS_H_DEFAULTS[bucket] ?? 2.5
+    }
+    return {
+      player_id: str(r.player_id),
+      height,
+      weight: num(r.Weight),
+      wingspan,
+      standing_reach: num(r.Standing_Reach),
+      ws_minus_h: wsMinusH,
+    }
+  })
   await upsertBatch('measurables', rows)
 }
 
