@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import TierBadge from '../components/TierBadge'
 import BucketBadge from '../components/BucketBadge'
+import { compositeTier, RAUS_TIERS } from '../lib/tiers'
 
 const SORTABLE_COLS = [
   { key: 'overall_rank', label: '#' },
@@ -17,11 +18,7 @@ const SORTABLE_COLS = [
   { key: 'tier', label: 'Tier' },
 ]
 
-const ALL_TIERS = [
-  'Tier 1 — Generational', 'Tier 2 — Franchise', 'Tier 3 — All-Star',
-  'Tier 4 — High-End Starter', 'Tier 3 — High-End Starter',
-  'Tier 5 — Rotation', 'Tier 6 — Development', 'Tier 7 — Longshot',
-]
+const ALL_TIERS = RAUS_TIERS.map(t => t.label)
 
 function scoreCell(val, highlight) {
   if (val == null) return <span style={{ color: '#9ca3af' }}>—</span>
@@ -141,7 +138,8 @@ export default function BigBoard() {
         <button className="bb-dash-btn" onClick={() => navigate('/dashboard')}>Dashboard</button>
         <button className="bb-dash-btn" onClick={() => navigate('/draft-results')}>Draft Results</button>
         <button className="bb-dash-btn" onClick={() => navigate('/archive')}>Archive</button>
-        <button className="bb-dash-btn" style={{ background: 'rgba(168,85,247,0.15)', borderColor: '#a855f7', color: '#c084fc' }} onClick={() => navigate('/mock-draft')}>Mock Draft</button>
+        <button className="bb-dash-btn" style={{ background: 'rgba(223,255,0,0.1)', borderColor: '#DFFF00', color: '#DFFF00' }} onClick={() => navigate('/mock-draft')}>Mock Draft</button>
+        <button className="bb-dash-btn" onClick={() => navigate('/historical')}>Historical DB</button>
         {compareIds.length >= 2 && (
           <button className="bb-compare-btn" onClick={() => navigate(`/compare?ids=${compareIds.join(',')}`)}>
             Compare ({compareIds.length})
@@ -166,7 +164,7 @@ export default function BigBoard() {
           <option value="Big">Bigs</option>
         </select>
         <select value={tierFilter} onChange={e => setTierFilter(e.target.value)} className="bb-select">
-          {tierOptions.map(t => <option key={t} value={t}>{t === 'All' ? 'All Tiers' : t.replace(/Tier \d — /, '')}</option>)}
+          {tierOptions.map(t => <option key={t} value={t}>{t === 'All' ? 'All Tiers' : t}</option>)}
         </select>
         <select value={archetypeFilter} onChange={e => setArchetypeFilter(e.target.value)} className="bb-select">
           {archetypes.map(a => <option key={a} value={a}>{a === 'All' ? 'All Archetypes' : a}</option>)}
@@ -238,7 +236,14 @@ export default function BigBoard() {
                 <td className="bb-num">{scoreCell(p.aaa)}</td>
                 <td className="bb-num">{scoreCell(p.oai)}</td>
                 <td className="bb-num bb-comp">{scoreCell(p.composite_score)}</td>
-                <td><TierBadge tier={p.tier} /></td>
+                <td>{(() => {
+                  const ct = compositeTier(p.composite_score)
+                  return ct ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: ct.color + '18', color: ct.color, whiteSpace: 'nowrap' }}>
+                      {ct.label}
+                    </span>
+                  ) : <TierBadge tier={p.tier} />
+                })()}</td>
               </tr>
             ))}
             {filtered.length === 0 && (

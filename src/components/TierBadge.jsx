@@ -1,37 +1,31 @@
-const TIER_COLORS = {
-  'Tier 1 — Generational':      { bg: '#7c3aed', text: '#fff' },
-  'Tier 2 — Franchise':         { bg: '#2563eb', text: '#fff' },
-  'Tier 3 — All-Star':          { bg: '#0891b2', text: '#fff' },
-  'Tier 4 — High-End Starter':  { bg: '#059669', text: '#fff' },
-  'Tier 3 — High-End Starter':  { bg: '#059669', text: '#fff' },
-  'Tier 5 — Rotation':          { bg: '#d97706', text: '#fff' },
-  'Tier 6 — Development':       { bg: '#dc2626', text: '#fff' },
-  'Tier 7 — Longshot':          { bg: '#6b7280', text: '#fff' },
-}
+import { RAUS_TIERS } from '../lib/tiers'
 
-function shortTier(tier) {
-  if (!tier) return '—'
-  const match = tier.match(/Tier \d — (.+)/)
-  return match ? match[1] : tier
-}
+const TIER_COLORS = Object.fromEntries(
+  RAUS_TIERS.map(t => [t.label, { bg: t.color + '22', text: t.color }])
+)
 
 export default function TierBadge({ tier }) {
-  const colors = TIER_COLORS[tier] || { bg: '#6b7280', text: '#fff' }
+  if (!tier) return <span style={{ color: '#64748b', fontSize: 11 }}>—</span>
+
+  // Support both old format "Tier N — Label" and new format "Label"
+  const label = tier.replace(/^Tier \d+ — /, '')
+  const colors = TIER_COLORS[label] || TIER_COLORS[tier] || { bg: '#6b728022', text: '#6b7280' }
+
   return (
     <span style={{
       display: 'inline-block',
       padding: '2px 8px',
       borderRadius: 4,
       fontSize: 11,
-      fontWeight: 600,
+      fontWeight: 700,
       letterSpacing: 0.3,
       whiteSpace: 'nowrap',
       backgroundColor: colors.bg,
       color: colors.text,
     }}>
-      {shortTier(tier)}
+      {label}
     </span>
   )
 }
 
-export { TIER_COLORS, shortTier }
+export { TIER_COLORS }

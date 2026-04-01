@@ -15,6 +15,19 @@ export function computeLCI(ts_pct, usg, ast_pct) {
 }
 
 /**
+ * LCI Tier Labels — uses centralized tiers from lib/tiers.js.
+ * Kept here for backwards compatibility with engine pipeline.
+ */
+export function lciTier(lci) {
+  if (lci == null) return null
+  if (lci >= 2.80) return 'Elite Load Carrier'
+  if (lci >= 2.40) return 'High-Volume Efficient'
+  if (lci >= 2.00) return 'Solid Load Handler'
+  if (lci >= 1.60) return 'Role Player Load'
+  return 'Low Load Capacity'
+}
+
+/**
  * Stocks-to-Foul Ratio — defensive discipline metric.
  * sfr = (stl_per40 + blk_per40) / pf_per40
  *
@@ -52,6 +65,15 @@ export function computeWSHFactor(ws_minus_h) {
   return round(1 + ((ws_minus_h - 2.5) / 25))
 }
 
+export function wshTierLabel(wshFactor) {
+  if (wshFactor == null) return null
+  if (wshFactor >= 1.14) return 'Elite Length'
+  if (wshFactor >= 1.06) return 'Plus Length'
+  if (wshFactor >= 0.98) return 'Average Length'
+  if (wshFactor >= 0.92) return 'Below Average Length'
+  return 'Short Reach'
+}
+
 /**
  * FT% Projection Label.
  * ≥ 80% = "Projectable Stroke"
@@ -81,10 +103,11 @@ export function computeDerivedMetrics(stats, measurables) {
   const wsh_factor = measurables?.ws_minus_h != null ? computeWSHFactor(measurables.ws_minus_h) : null
   const ft_pct_label = ftPctLabel(stats.ft_pct)
 
+  // Note: lci_tier, sfr_label, wsh_tier are computed on-the-fly in UI
+  // Only persist columns that exist in the derived_metrics table
   return {
     lci,
     sfr,
-    sfr_label: sfrLabel(sfr),
     wsh_factor,
     ft_pct_label,
   }

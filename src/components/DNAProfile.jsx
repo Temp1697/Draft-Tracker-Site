@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 const ARCHETYPES = [
   { key: 'king_score', label: 'King', icon: 'LBJ', comp: 'king_components' },
   { key: 'klaw_score', label: 'Klaw', icon: 'KL', comp: 'klaw_components' },
@@ -13,11 +15,11 @@ const ARCHETYPES = [
 ]
 
 function scoreColor(score) {
-  if (score == null) return { bg: '#1e293b', text: '#475569', border: '#334155' }
-  if (score >= 80) return { bg: '#7c3aed', text: '#fff', border: '#7c3aed' }
-  if (score >= 70) return { bg: '#2563eb', text: '#fff', border: '#2563eb' }
-  if (score >= 60) return { bg: '#1e293b', text: '#60a5fa', border: '#3b82f6' }
-  return { bg: '#1e293b', text: '#475569', border: '#334155' }
+  if (score == null) return { bg: '#161B2B', text: '#3E4766', border: '#242C45' }
+  if (score >= 80) return { bg: '#DFFF0022', text: '#DFFF00', border: '#DFFF00' }
+  if (score >= 70) return { bg: '#2DD4BF22', text: '#2DD4BF', border: '#2DD4BF' }
+  if (score >= 60) return { bg: '#161B2B', text: '#60A5FA', border: '#60A5FA' }
+  return { bg: '#161B2B', text: '#3E4766', border: '#242C45' }
 }
 
 function ComponentBar({ components }) {
@@ -48,19 +50,22 @@ function ComponentBar({ components }) {
 }
 
 export default function DNAProfile({ dna }) {
+  const [expanded, setExpanded] = useState(false)
+
   if (!dna) return <div className="sc-section-empty">No DNA data available</div>
 
-  // Sort by score descending, filter out nulls
   const ranked = ARCHETYPES
     .map(a => ({ ...a, score: dna[a.key], components: dna[a.comp] }))
     .filter(a => a.score != null)
     .sort((a, b) => b.score - a.score)
 
+  const qualifying = ranked.filter(a => a.score >= 60)
   const top3 = ranked.slice(0, 3)
   const rest = ranked.slice(3)
 
   return (
     <div className="dna-profile">
+      {/* Compact header with primary/secondary */}
       {dna.primary_archetype && (
         <div className="dna-headline">
           <span className="dna-primary">{dna.primary_archetype}</span>
@@ -70,35 +75,60 @@ export default function DNAProfile({ dna }) {
         </div>
       )}
 
-      <div className="dna-top-grid">
-        {top3.map(a => {
+      {/* Compact row of qualifying archetypes */}
+      <div className="dna-compact-row">
+        {(qualifying.length > 0 ? qualifying : ranked.slice(0, 3)).map(a => {
           const colors = scoreColor(a.score)
           return (
-            <div key={a.key} className="dna-card" style={{ borderColor: colors.border }}>
-              <div className="dna-card-header">
-                <span className="dna-archetype-name">{a.label}</span>
-                <span className="dna-score" style={{ backgroundColor: colors.bg, color: colors.text }}>
-                  {a.score}
-                </span>
-              </div>
-              <ComponentBar components={a.components} />
-            </div>
+            <span key={a.key} className="dna-compact-chip" style={{
+              borderColor: colors.border,
+              color: colors.text,
+              background: colors.bg,
+            }}>
+              {a.label} {a.score}
+            </span>
           )
         })}
+        {ranked.length > 0 && (
+          <button className="dna-expand-btn" onClick={() => setExpanded(v => !v)}>
+            {expanded ? 'Less' : `+${ranked.length - qualifying.length} more`}
+          </button>
+        )}
       </div>
 
-      {rest.length > 0 && (
-        <div className="dna-rest">
-          {rest.map(a => {
-            const colors = scoreColor(a.score)
-            return (
-              <div key={a.key} className="dna-rest-item">
-                <span className="dna-rest-name">{a.label}</span>
-                <span className="dna-rest-score" style={{ color: colors.text }}>{a.score}</span>
-              </div>
-            )
-          })}
-        </div>
+      {/* Expanded full view */}
+      {expanded && (
+        <>
+          <div className="dna-top-grid">
+            {top3.map(a => {
+              const colors = scoreColor(a.score)
+              return (
+                <div key={a.key} className="dna-card" style={{ borderColor: colors.border }}>
+                  <div className="dna-card-header">
+                    <span className="dna-archetype-name">{a.label}</span>
+                    <span className="dna-score" style={{ backgroundColor: colors.bg, color: colors.text }}>
+                      {a.score}
+                    </span>
+                  </div>
+                  <ComponentBar components={a.components} />
+                </div>
+              )
+            })}
+          </div>
+          {rest.length > 0 && (
+            <div className="dna-rest">
+              {rest.map(a => {
+                const colors = scoreColor(a.score)
+                return (
+                  <div key={a.key} className="dna-rest-item">
+                    <span className="dna-rest-name">{a.label}</span>
+                    <span className="dna-rest-score" style={{ color: colors.text }}>{a.score}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   )

@@ -9,9 +9,13 @@
 import { supabase } from '../supabase.js'
 import { computeRAUS, assignTier } from './raus.js'
 import { computeSSA } from './ssa.js'
-import { computeComposite, assignAllBands } from './bigboard.js'
+import { computeComposite, assignAllBands, computeSizeMultiplier, computeAgeMultiplier } from './bigboard.js'
 import { computeDerivedMetrics } from './derived.js'
 import { computeAgeAdjustedScore, computeAgeCurveScore } from './agecurve.js'
+import { computeSkillMetrics, computePTC } from './skillmetrics.js'
+import { computeAutoSSAGrades } from './ssaauto.js'
+import { getPositionalDefaults } from '../positionalDefaults.js'
+import { fillDefaultsSync } from '../fillDefaults.js'
 
 /**
  * Run full recalculation for all players.
@@ -37,7 +41,7 @@ export async function recalculateAll(onProgress) {
     supabase.from('players').select('*'),
     supabase.from('raus_scores').select('*'),
     supabase.from('ssa_input').select('*'),
-    supabase.from('prospects').select('player_id, league_conf, class'),
+    supabase.from('prospects').select('player_id, league_conf, class, height'),
     supabase.from('athletic_scores').select('*'),
     supabase.from('measurables').select('player_id, ws_minus_h'),
   ])
@@ -54,19 +58,114 @@ export async function recalculateAll(onProgress) {
   const measMap = new Map(measurables.map(r => [r.player_id, r]))
 
   // -----------------------------------------------------------------------
-  // 2. Recalculate RAUS for each player
+  // 2. Compute skill metrics from stats + PTC from conference
+  // -----------------------------------------------------------------------
+  progress('Computing skill metrics from stats...')
+
+  // Fetch stats for skill metric computation
+  const { data: allStatsForMetrics } = await supabase.from('stats').select('*')
+  const statsForMetricsMap = new Map()
+  const playerStatsForMetrics = new Map()
+  for (const s of (allStatsForMetrics || [])) {
+    if (!playerStatsForMetrics.has(s.player_id)) playerStatsForMetrics.set(s.player_id, [])
+    playerStatsForMetrics.get(s.player_id).push(s)
+  }
+  for (const [pid, rows] of playerStatsForMetrics) {
+    rows.sort((a, b) => (b.season || '').localeCompare(a.season || ''))
+    statsForMetricsMap.set(pid, rows[0]) // most recent season
+  }
+
+  // -----------------------------------------------------------------------
+  // 2a. Load positional defaults and fill NULL stats/measurables
+  // -----------------------------------------------------------------------
+  progress('Loading positional defaults...')
+  let posDefaults = { guard: {}, wing: {}, big: {} }
+  try {
+    posDefaults = await getPositionalDefaults()
+  } catch (err) {
+    progress(`  Warning: Could not load positional defaults: ${err.message}`)
+  }
+
+  // Build filled stats map (originals + defaults for NULLs)
+  const filledStatsMap = new Map()
+  for (const [pid, rawStats] of statsForMetricsMap) {
+    const player = players.find(p => p.player_id === pid)
+    if (!player) { filledStatsMap.set(pid, rawStats); continue }
+    const meas = measMap.get(pid)
+    const { stats: filled } = fillDefaultsSync(rawStats, meas, player.primary_bucket, posDefaults)
+    filledStatsMap.set(pid, filled)
+  }
+
+  // Also fill defaults for players with NO stats at all
+  for (const player of players) {
+    if (!filledStatsMap.has(player.player_id)) {
+      const meas = measMap.get(player.player_id)
+      const { stats: filled } = fillDefaultsSync(null, meas, player.primary_bucket, posDefaults)
+      if (Object.keys(filled).length > 0) {
+        filled.player_id = player.player_id
+        filledStatsMap.set(player.player_id, filled)
+      }
+    }
+  }
+
+  // Pre-compute the full stats array ONCE for percentile-based normalization
+  // Use filled stats so players with defaults contribute to the pool
+  const allStatsArray = Array.from(filledStatsMap.values())
+
+  const skillMetricUpdates = []
+  for (const player of players) {
+    const pid = player.player_id
+    const playerStats = filledStatsMap.get(pid)
+    const prospect = prospectMap.get(pid)
+
+    // Compute PTC from conference
+    const ptc = computePTC(prospect?.league_conf)
+
+    // Compute skill metrics from stats (percentile-based against full pool)
+    const metrics = computeSkillMetrics(playerStats, player.primary_bucket, allStatsArray)
+
+    skillMetricUpdates.push({
+      player_id: pid,
+      scr_auto: metrics.scr,
+      rpi_auto: metrics.rpi,
+      sci_auto: metrics.sci,
+      ucs_auto: metrics.ucs,
+      fcs_auto: metrics.fcs,
+      adr_auto: metrics.adr,
+      sti_auto: metrics.sti,
+      rsm_auto: metrics.rsm,
+      dri_auto: metrics.dri,
+      ptc_auto: ptc,
+    })
+  }
+
+  // Batch upsert skill metrics to raus_scores
+  if (skillMetricUpdates.length > 0) {
+    for (let i = 0; i < skillMetricUpdates.length; i += 50) {
+      const batch = skillMetricUpdates.slice(i, i + 50)
+      const { error } = await supabase.from('raus_scores').upsert(batch, { onConflict: 'player_id' })
+      if (error) errors.push(`Skill metrics batch ${i}: ${error.message}`)
+    }
+    progress(`  Skill metrics: ${skillMetricUpdates.length} players computed`)
+  }
+
+  // Build updated raus map with new skill metrics
+  const updatedRausMap = new Map()
+  for (const u of skillMetricUpdates) {
+    const existing = rausMap.get(u.player_id) || {}
+    updatedRausMap.set(u.player_id, { ...existing, ...u })
+  }
+
+  // -----------------------------------------------------------------------
+  // 3. Recalculate RAUS for each player
   // -----------------------------------------------------------------------
   progress(`Recalculating RAUS for ${players.length} players...`)
 
   const rausUpdates = []
   for (const player of players) {
     const pid = player.player_id
-    const raus = rausMap.get(pid)
+    const raus = updatedRausMap.get(pid) || rausMap.get(pid)
     if (!raus) continue
-
-    // Get PTC from prospects league_conf
-    const prospect = prospectMap.get(pid)
-    const ptc = raus.ptc_auto ?? 1
 
     const computed = computeRAUS({
       ...raus,
@@ -86,32 +185,90 @@ export async function recalculateAll(onProgress) {
 
   // Batch upsert RAUS
   if (rausUpdates.length > 0) {
-    const { error } = await supabase.from('raus_scores').upsert(rausUpdates, { onConflict: 'player_id' })
-    if (error) errors.push(`RAUS upsert: ${error.message}`)
-    else progress(`  RAUS: ${rausUpdates.length} players updated`)
+    for (let i = 0; i < rausUpdates.length; i += 50) {
+      const batch = rausUpdates.slice(i, i + 50)
+      const { error } = await supabase.from('raus_scores').upsert(batch, { onConflict: 'player_id' })
+      if (error) errors.push(`RAUS upsert batch ${i}: ${error.message}`)
+    }
+    progress(`  RAUS: ${rausUpdates.length} players updated`)
   }
 
   // Refresh raus data after update
   const rausFinalMap = new Map(rausUpdates.map(r => [r.player_id, r.raus_final]))
 
   // -----------------------------------------------------------------------
-  // 3. Recalculate SSA for each player
+  // 3.5. Compute auto SSA grades from stats
+  // -----------------------------------------------------------------------
+  progress('Computing auto SSA grades from stats...')
+
+  // Use filled stats for all players to build percentile ranks
+  const statsForSSA = []
+  for (const player of players) {
+    const s = filledStatsMap.get(player.player_id)
+    if (s) statsForSSA.push(s)
+  }
+
+  const autoSSAMap = computeAutoSSAGrades(statsForSSA)
+
+  // Upsert auto grades to ssa_input (only for players who don't have manual overrides)
+  const ssaAutoUpdates = []
+  for (const player of players) {
+    const pid = player.player_id
+    const autoGrades = autoSSAMap.get(pid)
+    if (!autoGrades) continue
+
+    const existing = ssaInputMap.get(pid)
+    // If no existing ssa_input row, create one with auto grades
+    // If existing, only update fields that are still at default (5.0) or null
+    const row = { player_id: pid }
+    let hasUpdate = false
+
+    for (const [key, val] of Object.entries(autoGrades)) {
+      if (val == null) continue
+      if (!existing || existing[key] == null || existing[key] === 5) {
+        row[key] = val
+        hasUpdate = true
+      }
+    }
+
+    if (hasUpdate) {
+      ssaAutoUpdates.push(row)
+    }
+  }
+
+  if (ssaAutoUpdates.length > 0) {
+    for (let i = 0; i < ssaAutoUpdates.length; i += 50) {
+      const batch = ssaAutoUpdates.slice(i, i + 50)
+      const { error } = await supabase.from('ssa_input').upsert(batch, { onConflict: 'player_id' })
+      if (error) errors.push(`SSA auto grades batch ${i}: ${error.message}`)
+    }
+    progress(`  SSA auto grades: ${ssaAutoUpdates.length} players updated`)
+  }
+
+  // Refresh ssa_input map after auto grades
+  const { data: refreshedSSAInput } = await supabase.from('ssa_input').select('*')
+  const updatedSSAInputMap = new Map((refreshedSSAInput || []).map(r => [r.player_id, r]))
+
+  // -----------------------------------------------------------------------
+  // 4. Recalculate SSA for each player
   // -----------------------------------------------------------------------
   progress(`Recalculating SSA for ${players.length} players...`)
 
   const ssaUpdates = []
   for (const player of players) {
     const pid = player.player_id
-    const input = ssaInputMap.get(pid)
+    const input = updatedSSAInputMap.get(pid) || ssaInputMap.get(pid)
     if (!input) continue
 
     const bucket = player.primary_bucket
     const meas = measMap.get(pid)
 
     // WS-H modifier: 1 + ((ws_minus_h - 2.5) / 25)
+    // Use positional default if real ws_minus_h is missing
+    const wsH = meas?.ws_minus_h ?? posDefaults[bucket?.toLowerCase()]?.ws_minus_h
     let wsHMod = 1.0
-    if (meas?.ws_minus_h != null) {
-      wsHMod = 1 + ((meas.ws_minus_h - 2.5) / 25)
+    if (wsH != null) {
+      wsHMod = 1 + ((wsH - 2.5) / 25)
     }
 
     // Age modifier: younger gets a bump
@@ -140,28 +297,31 @@ export async function recalculateAll(onProgress) {
   const ssaFinalMap = new Map((allSSA || []).map(r => [r.player_id, r.ssa_auto_final]))
 
   // -----------------------------------------------------------------------
-  // 4. Fetch stats + measurables (used by age curve and derived metrics)
+  // 5. Fetch measurables + build stats maps (used by age curve and derived)
   // -----------------------------------------------------------------------
-  const { data: allStats } = await supabase.from('stats').select('*')
   const { data: allMeas } = await supabase.from('measurables').select('*')
 
   // Build maps: player_id → most recent stats, player_id → prior season stats
+  // Re-use the stats we already fetched for skill metrics
   const currentStatsMap = new Map()
   const priorStatsMap = new Map()
-  const playerStatsGrouped = new Map()
-  for (const s of (allStats || [])) {
-    if (!playerStatsGrouped.has(s.player_id)) playerStatsGrouped.set(s.player_id, [])
-    playerStatsGrouped.get(s.player_id).push(s)
-  }
-  for (const [pid, rows] of playerStatsGrouped) {
-    rows.sort((a, b) => (b.season || '').localeCompare(a.season || ''))
+  for (const [pid, rows] of playerStatsForMetrics) {
     currentStatsMap.set(pid, rows[0])
     if (rows.length > 1) priorStatsMap.set(pid, rows[1])
   }
   const fullMeasMap = new Map((allMeas || []).map(r => [r.player_id, r]))
 
+  // Build filled measurables map (originals + positional defaults for NULLs)
+  const filledMeasMap = new Map()
+  for (const player of players) {
+    const pid = player.player_id
+    const rawMeas = fullMeasMap.get(pid)
+    const { measurables: filledMeas } = fillDefaultsSync(null, rawMeas, player.primary_bucket, posDefaults)
+    filledMeasMap.set(pid, filledMeas)
+  }
+
   // -----------------------------------------------------------------------
-  // 5. Compute Big Board composite with age curve + assign bands + tiers
+  // 6. Compute Big Board composite with age curve + assign bands + tiers
   // -----------------------------------------------------------------------
   progress('Computing Big Board composite (with age curve)...')
 
@@ -195,8 +355,14 @@ export async function recalculateAll(onProgress) {
       computeAgeAdjustedScore(ssaRaw, prospect?.class, player.birth_year, curStats, prevStats)
     const ageCurve = computeAgeCurveScore(prospect?.class, player.birth_year, curStats, prevStats)
 
+    // Task 19: Size multiplier from prospect height vs position prototype
+    const sizeMultiplier = computeSizeMultiplier(prospect?.height, player.primary_bucket)
+
+    // Task 20: Age multiplier (separate from SSA age modifier)
+    const ageMultiplier = computeAgeMultiplier(player.birth_year)
+
     // Use age-adjusted SSA in composite, age curve score replaces simple age factor
-    const { composite } = computeComposite(rausFinal, ssaAdjusted ?? ssaRaw, aaa, oai, null, ageCurve.score)
+    const { composite } = computeComposite(rausFinal, ssaAdjusted ?? ssaRaw, aaa, oai, null, ageCurve.score, sizeMultiplier, ageMultiplier)
     const tier = assignTier(rausFinal)
 
     masterUpdates.push({
@@ -233,15 +399,15 @@ export async function recalculateAll(onProgress) {
   }
 
   // -----------------------------------------------------------------------
-  // 6. Compute derived metrics (LCI, SFR, WS-H Factor, FT% label)
+  // 7. Compute derived metrics (LCI, SFR, WS-H Factor, FT% label)
   // -----------------------------------------------------------------------
   progress('Computing derived metrics...')
 
   const derivedUpdates = []
   for (const player of players) {
     const pid = player.player_id
-    const stats = statsMap.get(pid)
-    const meas = fullMeasMap.get(pid)
+    const stats = filledStatsMap.get(pid) || currentStatsMap.get(pid)
+    const meas = filledMeasMap.get(pid) || fullMeasMap.get(pid)
     const dm = computeDerivedMetrics(stats, meas)
     if (!dm) continue
     derivedUpdates.push({ player_id: pid, ...dm })

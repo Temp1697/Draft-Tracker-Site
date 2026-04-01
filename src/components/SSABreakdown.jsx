@@ -16,12 +16,12 @@ const SSA_WEIGHTS = {
 }
 
 function barColor(val) {
-  if (val == null) return '#334155'
-  if (val >= 8.5) return '#22c55e'
-  if (val >= 7.0) return '#3b82f6'
-  if (val >= 5.5) return '#eab308'
-  if (val >= 4.0) return '#f97316'
-  return '#ef4444'
+  if (val == null) return '#242C45'
+  if (val >= 8.5) return '#DFFF00'
+  if (val >= 7.0) return '#2DD4BF'
+  if (val >= 5.5) return '#60A5FA'
+  if (val >= 4.0) return '#FBBF24'
+  return '#F87171'
 }
 
 export default function SSABreakdown({ ssa, bucket }) {

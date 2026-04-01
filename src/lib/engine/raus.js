@@ -14,13 +14,14 @@ const RAUS_WEIGHTS = {
 }
 
 const TIERS = [
-  { tier: 'Tier 1 — Generational', anchor: 9.7, sigma: 0.4 },
-  { tier: 'Tier 2 — Franchise', anchor: 8.8, sigma: 0.55 },
-  { tier: 'Tier 3 — All-Star', anchor: 7.9, sigma: 0.65 },
-  { tier: 'Tier 4 — High-End Starter', anchor: 7.0, sigma: 0.7 },
-  { tier: 'Tier 5 — Rotation', anchor: 6.0, sigma: 0.75 },
-  { tier: 'Tier 6 — Development', anchor: 5.0, sigma: 0.85 },
-  { tier: 'Tier 7 — Longshot', anchor: 4.0, sigma: 1.0 },
+  { tier: 'Generational', min: 9.0 },
+  { tier: 'Franchise', min: 8.2 },
+  { tier: 'All-Star', min: 7.4 },
+  { tier: 'High-End Starter', min: 6.6 },
+  { tier: 'Solid Starter', min: 5.8 },
+  { tier: 'Rotation', min: 5.0 },
+  { tier: 'Development', min: 4.2 },
+  { tier: 'Longshot', min: -Infinity },
 ]
 
 function round(v, decimals = 2) {
@@ -77,7 +78,7 @@ export function computePPI(metrics, ptc) {
 export function assignTier(rausFinal) {
   if (rausFinal == null) return null
   for (const t of TIERS) {
-    if (rausFinal >= t.anchor - t.sigma) return t.tier
+    if (rausFinal >= t.min) return t.tier
   }
   return TIERS[TIERS.length - 1].tier
 }

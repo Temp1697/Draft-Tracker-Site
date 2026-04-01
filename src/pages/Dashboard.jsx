@@ -1,30 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { recalculateAll } from '../lib/engine/index.js'
 import TierBadge from '../components/TierBadge'
 import BucketBadge from '../components/BucketBadge'
+import { RAUS_TIERS } from '../lib/tiers'
 
-const TIER_ORDER = [
-  'Tier 1 — Generational',
-  'Tier 2 — Franchise',
-  'Tier 3 — All-Star',
-  'Tier 4 — High-End Starter',
-  'Tier 5 — Rotation',
-  'Tier 6 — Development',
-  'Tier 7 — Longshot',
-]
+const TIER_ORDER = RAUS_TIERS.map(t => t.label)
 
-const TIER_COLORS = {
-  'Tier 1 — Generational': '#a855f7',
-  'Tier 2 — Franchise': '#3b82f6',
-  'Tier 3 — All-Star': '#06b6d4',
-  'Tier 4 — High-End Starter': '#22c55e',
-  'Tier 5 — Rotation': '#f59e0b',
-  'Tier 6 — Development': '#ef4444',
-  'Tier 7 — Longshot': '#6b7280',
-}
+const TIER_COLORS = Object.fromEntries(RAUS_TIERS.map(t => [t.label, t.color]))
 
-const BUCKET_COLORS = { Guard: '#3b82f6', Wing: '#22c55e', Big: '#eab308' }
+const BUCKET_COLORS = { Guard: '#60A5FA', Wing: '#34D399', Big: '#FBBF24' }
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -35,6 +21,9 @@ export default function Dashboard() {
   const [ssaScores, setSSA] = useState([])
   const [stats, setStats] = useState([])
   const [loading, setLoading] = useState(true)
+  const [recalculating, setRecalculating] = useState(false)
+  const [recalcStatus, setRecalcStatus] = useState(null)
+  const [recalcLog, setRecalcLog] = useState([])
 
   useEffect(() => {
     async function load() {
@@ -139,6 +128,27 @@ export default function Dashboard() {
     return gaps.sort((a, b) => a.rank - b.rank)
   }, [board, athletic, ssaScores, stats])
 
+  async function handleRecalculate() {
+    if (recalculating) return
+    setRecalculating(true)
+    setRecalcLog([])
+    setRecalcStatus(null)
+    try {
+      const result = await recalculateAll((msg) => {
+        setRecalcLog(prev => [...prev, msg])
+      })
+      setRecalcStatus(result)
+      if (result.success) {
+        // Reload board data
+        const { data: b } = await supabase.from('master_board').select('*').order('overall_rank')
+        if (b) setBoard(b)
+      }
+    } catch (err) {
+      setRecalcStatus({ success: false, errors: [err.message], playerCount: 0 })
+    }
+    setRecalculating(false)
+  }
+
   if (loading) return <div className="bb-loading">Loading dashboard...</div>
 
   return (
@@ -146,7 +156,39 @@ export default function Dashboard() {
       <div className="dash-header">
         <h1>Dashboard</h1>
         <button className="sc-back" onClick={() => navigate('/')}>&larr; Big Board</button>
+        <button
+          className="dr-save-btn"
+          onClick={handleRecalculate}
+          disabled={recalculating}
+          style={{ marginLeft: 'auto' }}
+        >
+          {recalculating ? 'Recalculating...' : 'Recalculate All'}
+        </button>
       </div>
+
+      {/* Recalculation log */}
+      {(recalcLog.length > 0 || recalcStatus) && (
+        <div style={{
+          background: '#0f172a', border: '1px solid #334155', borderRadius: 10,
+          padding: '12px 16px', marginBottom: 16, maxHeight: 200, overflowY: 'auto',
+          fontFamily: 'monospace', fontSize: 12, lineHeight: 1.6,
+        }}>
+          {recalcLog.map((msg, i) => (
+            <div key={i} style={{ color: '#94a3b8' }}>{msg}</div>
+          ))}
+          {recalcStatus && (
+            <div style={{
+              marginTop: 8, fontWeight: 700,
+              color: recalcStatus.success ? '#4ade80' : '#f87171',
+            }}>
+              {recalcStatus.success
+                ? `Done! ${recalcStatus.playerCount} players recalculated.`
+                : `Finished with ${recalcStatus.errors.length} error(s): ${recalcStatus.errors.join('; ')}`
+              }
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Top stats row */}
       <div className="dash-stats-row">

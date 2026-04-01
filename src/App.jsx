@@ -7,7 +7,9 @@ import Dashboard from './pages/Dashboard'
 import DraftResults from './pages/DraftResults'
 import DraftArchive from './pages/DraftArchive'
 import MockDraft from './pages/MockDraft'
+import MockDraftArchive from './pages/MockDraftArchive'
 import TeamNeeds from './pages/TeamNeeds'
+import HistoricalAdmin from './pages/HistoricalAdmin'
 import './App.css'
 
 function App() {
@@ -23,7 +25,9 @@ function App() {
         <Route path="/draft-results" element={<DraftResults />} />
         <Route path="/archive" element={<DraftArchive />} />
         <Route path="/mock-draft" element={<MockDraft />} />
+        <Route path="/mock-draft/archive" element={<MockDraftArchive />} />
         <Route path="/team-needs" element={<TeamNeeds />} />
+        <Route path="/historical" element={<HistoricalAdmin />} />
       </Routes>
     </BrowserRouter>
   )

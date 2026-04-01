@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getRecommendations } from '../lib/needMap'
 import TierBadge from '../components/TierBadge'
@@ -44,6 +44,14 @@ export default function MockDraft() {
   const [savedMocks, setSavedMocks] = useState([])
   const [showHistory, setShowHistory] = useState(false)
 
+  // Auto-save indicator
+  const [showSaved, setShowSaved] = useState(false)
+  const savedTimerRef = useRef(null)
+
+  // Draft order setup state
+  const [showDraftSetup, setShowDraftSetup] = useState(false)
+  const [customDraftOrder, setCustomDraftOrder] = useState([...DEFAULT_DRAFT_ORDER])
+
   useEffect(() => {
     async function load() {
       const [{ data: t }, { data: b }, { data: mocks }] = await Promise.all([
@@ -79,6 +87,13 @@ export default function MockDraft() {
     }
     load()
   }, [mockIdParam])
+
+  // Cleanup saved timer on unmount
+  useEffect(() => {
+    return () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    }
+  }, [])
 
   const teamMap = useMemo(() => new Map(teams.map(t => [t.team_id, t])), [teams])
 
@@ -117,8 +132,21 @@ export default function MockDraft() {
     return getRecommendations(currentPickData.team, availablePlayers, 3)
   }, [currentPickData, availablePlayers])
 
-  // Create new mock draft
-  async function createMock(name) {
+  // Flash the "Saved" indicator
+  function flashSaved() {
+    setShowSaved(true)
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
+    savedTimerRef.current = setTimeout(() => setShowSaved(false), 2000)
+  }
+
+  // Create new mock draft - now goes to draft order setup
+  function handleCreateClick() {
+    setCustomDraftOrder([...DEFAULT_DRAFT_ORDER])
+    setShowDraftSetup(true)
+  }
+
+  // Actually create the mock with the custom draft order
+  async function createMock(name, draftOrder) {
     setSaving(true)
     const { data: mock, error } = await supabase
       .from('mock_drafts')
@@ -128,13 +156,14 @@ export default function MockDraft() {
 
     if (error) { console.error(error); setSaving(false); return }
 
-    // Create 60 pick slots
-    const pickRows = DEFAULT_DRAFT_ORDER.map((teamId, i) => ({
+    // Create 60 pick slots using custom draft order
+    const pickRows = draftOrder.map((teamId, i) => ({
       mock_draft_id: mock.id,
       pick_number: i + 1,
       round: i < 30 ? 1 : 2,
-      original_team_id: teamId,
+      original_team_id: DEFAULT_DRAFT_ORDER[i],
       current_team_id: teamId,
+      is_traded: teamId !== DEFAULT_DRAFT_ORDER[i],
     }))
 
     const { data: createdPicks, error: e2 } = await supabase
@@ -149,6 +178,7 @@ export default function MockDraft() {
     setPicks(createdPicks || [])
     setCurrentPick(1)
     setShowNewModal(false)
+    setShowDraftSetup(false)
     setSaving(false)
 
     // Update URL
@@ -167,11 +197,20 @@ export default function MockDraft() {
 
     if (error) { console.error(error); return }
 
+    // Update the mock_drafts updated_at timestamp
+    if (mockId) {
+      await supabase
+        .from('mock_drafts')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', mockId)
+    }
+
     setPicks(prev => prev.map(p =>
       p.pick_number === currentPick ? { ...p, player_id: playerId } : p
     ))
     setCurrentPick(prev => prev + 1)
     setConfirmPick(null)
+    flashSaved()
   }
 
   // Undo last pick
@@ -239,18 +278,114 @@ export default function MockDraft() {
 
   const getTierColor = (tier) => {
     const colors = {
-      'Tier 1 — Generational': '#a855f7',
-      'Tier 2 — Franchise': '#3b82f6',
-      'Tier 3 — All-Star': '#06b6d4',
-      'Tier 4 — High-End Starter': '#22c55e',
-      'Tier 5 — Rotation': '#f59e0b',
-      'Tier 6 — Development': '#ef4444',
-      'Tier 7 — Longshot': '#6b7280',
+      'Generational': '#DFFF00',
+      'Franchise': '#2DD4BF',
+      'All-Star': '#34D399',
+      'High-End Starter': '#60A5FA',
+      'Solid Starter': '#60A5FA',
+      'Rotation': '#FBBF24',
+      'Development': '#FB923C',
+      'Longshot': '#F87171',
     }
-    return colors[tier] || '#334155'
+    // Support both old and new tier formats
+    const label = tier?.replace(/^Tier \d+ — /, '') || ''
+    return colors[label] || colors[tier] || '#242C45'
+  }
+
+  // Update a single pick in the custom draft order
+  function updateDraftOrderPick(index, newTeamId) {
+    setCustomDraftOrder(prev => {
+      const next = [...prev]
+      next[index] = newTeamId
+      return next
+    })
   }
 
   if (loading) return <div className="bb-loading">Loading Mock Draft...</div>
+
+  // Draft Order Setup Screen
+  if (showDraftSetup) {
+    return (
+      <div className="mock-container">
+        <div className="mock-header">
+          <h1>Draft Order Setup</h1>
+          <button className="sc-back" onClick={() => { setShowDraftSetup(false) }}>&larr; Back</button>
+        </div>
+        <div className="mock-new-modal" style={{ maxWidth: 1200 }}>
+          <h2>Customize Draft Order</h2>
+          <p style={{ color: '#94a3b8', fontSize: 13, marginBottom: 16 }}>
+            Edit the team for any pick to reflect trades. Pre-populated with the default 2025-style lottery order.
+          </p>
+
+          <h3 className="mock-round-title">Round 1</h3>
+          <div className="mock-setup-grid">
+            {customDraftOrder.slice(0, 30).map((teamId, i) => (
+              <div key={i} className="mock-setup-pick">
+                <div className="mock-setup-pick-header">
+                  <span className="mock-pick-num">#{i + 1}</span>
+                  <span style={{ fontSize: 10, color: '#64748b' }}>R1</span>
+                </div>
+                <select
+                  className="mock-setup-select"
+                  value={teamId}
+                  onChange={e => updateDraftOrderPick(i, e.target.value)}
+                >
+                  {teams.map(t => (
+                    <option key={t.team_id} value={t.team_id}>{t.team_id}</option>
+                  ))}
+                </select>
+                {teamId !== DEFAULT_DRAFT_ORDER[i] && (
+                  <span className="mock-setup-traded">Traded</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <h3 className="mock-round-title">Round 2</h3>
+          <div className="mock-setup-grid">
+            {customDraftOrder.slice(30, 60).map((teamId, i) => (
+              <div key={i + 30} className="mock-setup-pick">
+                <div className="mock-setup-pick-header">
+                  <span className="mock-pick-num">#{i + 31}</span>
+                  <span style={{ fontSize: 10, color: '#64748b' }}>R2</span>
+                </div>
+                <select
+                  className="mock-setup-select"
+                  value={teamId}
+                  onChange={e => updateDraftOrderPick(i + 30, e.target.value)}
+                >
+                  {teams.map(t => (
+                    <option key={t.team_id} value={t.team_id}>{t.team_id}</option>
+                  ))}
+                </select>
+                {teamId !== DEFAULT_DRAFT_ORDER[i + 30] && (
+                  <span className="mock-setup-traded">Traded</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="mock-new-actions" style={{ marginTop: 20 }}>
+            <button
+              className="dr-save-btn"
+              onClick={() => createMock(mockName || 'Mock Draft', customDraftOrder)}
+              disabled={saving}
+            >
+              {saving ? 'Creating...' : 'Start Draft'}
+            </button>
+            <button
+              className="mock-cancel-btn"
+              onClick={() => {
+                setCustomDraftOrder([...DEFAULT_DRAFT_ORDER])
+              }}
+            >
+              Reset to Default
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // New mock modal
   if (showNewModal) {
@@ -274,10 +409,10 @@ export default function MockDraft() {
           <div className="mock-new-actions">
             <button
               className="dr-save-btn"
-              onClick={() => createMock(mockName || 'Mock Draft')}
+              onClick={handleCreateClick}
               disabled={saving}
             >
-              {saving ? 'Creating...' : 'Create Mock Draft'}
+              Next: Set Draft Order
             </button>
           </div>
 
@@ -313,6 +448,7 @@ export default function MockDraft() {
       <div className="mock-header">
         <h1>{mockName || 'Mock Draft'}</h1>
         <span className="bb-count">Pick {Math.min(currentPick, 60)} of 60</span>
+        {showSaved && <span className="mock-saved-indicator">Saved</span>}
         <button className="sc-back" onClick={() => navigate('/')}>&larr; Big Board</button>
         {currentPick > 1 && (
           <button className="mock-undo-btn" onClick={undoLastPick}>Undo Last Pick</button>
@@ -321,6 +457,7 @@ export default function MockDraft() {
           <button className="dr-save-btn" onClick={completeMock}>Mark Complete</button>
         )}
         <button className="bb-dash-btn" onClick={() => navigate('/team-needs')}>Team Needs</button>
+        <Link to="/mock-draft/archive" className="bb-dash-btn" style={{ textDecoration: 'none' }}>Archive</Link>
         <button className="bb-dash-btn" onClick={() => setShowHistory(!showHistory)}>
           {showHistory ? 'Hide History' : 'History'}
         </button>
