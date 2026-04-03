@@ -140,6 +140,7 @@ export default function BigBoard() {
         <button className="bb-dash-btn" onClick={() => navigate('/archive')}>Archive</button>
         <button className="bb-dash-btn" style={{ background: 'rgba(223,255,0,0.1)', borderColor: '#DFFF00', color: '#DFFF00' }} onClick={() => navigate('/mock-draft')}>Mock Draft</button>
         <button className="bb-dash-btn" onClick={() => navigate('/historical')}>Historical DB</button>
+        <button className="bb-dash-btn" style={{ background: 'rgba(223,255,0,0.08)', borderColor: '#B8860B', color: '#DAA520' }} onClick={() => navigate('/legendary-archives')}>Legendary Archives</button>
         {compareIds.length >= 2 && (
           <button className="bb-compare-btn" onClick={() => navigate(`/compare?ids=${compareIds.join(',')}`)}>
             Compare ({compareIds.length})

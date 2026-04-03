@@ -10,6 +10,7 @@ import MockDraft from './pages/MockDraft'
 import MockDraftArchive from './pages/MockDraftArchive'
 import TeamNeeds from './pages/TeamNeeds'
 import HistoricalAdmin from './pages/HistoricalAdmin'
+import LegendaryArchives from './pages/LegendaryArchives'
 import './App.css'
 
 function App() {
@@ -28,6 +29,7 @@ function App() {
         <Route path="/mock-draft/archive" element={<MockDraftArchive />} />
         <Route path="/team-needs" element={<TeamNeeds />} />
         <Route path="/historical" element={<HistoricalAdmin />} />
+        <Route path="/legendary-archives" element={<LegendaryArchives />} />
       </Routes>
     </BrowserRouter>
   )
