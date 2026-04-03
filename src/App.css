@@ -588,7 +588,16 @@ body {
 /* Shades of... Comps */
 .sc-shades-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .sc-shade-card { background: #1C2236; border: 1px solid #242C45; border-radius: 8px; padding: 16px; text-align: center; }
-.sc-shade-header { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.sc-shade-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.sc-shade-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.sc-shade-actions { display: flex; gap: 4px; align-items: center; }
+.sc-shade-manual-tag { font-size: 9px; padding: 2px 5px; border-radius: 3px; background: #3B82F6; color: #fff; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.sc-shade-btn { font-size: 10px; padding: 3px 8px; border-radius: 4px; border: 1px solid #444; background: #252545; color: #aaa; cursor: pointer; }
+.sc-shade-btn:hover { background: #333366; color: #fff; }
+.sc-shade-btn-reset { border-color: #F87171; color: #F87171; }
+.sc-shade-btn-reset:hover { background: #F8717120; color: #F87171; }
+.sc-shade-reset-all { display: block; margin: 12px auto 0; font-size: 11px; padding: 6px 16px; border-radius: 6px; border: 1px solid #F87171; background: transparent; color: #F87171; cursor: pointer; }
+.sc-shade-reset-all:hover { background: #F8717120; }
 .sc-shade-name { font-size: 18px; font-weight: 700; color: rgba(255,255,255,0.95); margin-bottom: 4px; }
 .sc-shade-meta { display: flex; justify-content: center; gap: 12px; font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 10px; }
 .sc-shade-stats { display: flex; justify-content: center; gap: 12px; font-size: 13px; color: rgba(255,255,255,0.75); font-weight: 500; }

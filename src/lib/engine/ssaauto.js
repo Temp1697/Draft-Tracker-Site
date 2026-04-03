@@ -15,6 +15,8 @@
 //   100th percentile -> ~9.5
 // ---------------------------------------------------------------------------
 
+import { pctConvert } from './skillmetrics.js'
+
 // ---- Category Definitions ------------------------------------------------
 // Each category lists the stats that feed into it.
 // Stats marked inverse: true mean lower values are better (the percentile
@@ -161,11 +163,12 @@ export function buildPercentileLookup(allStats) {
     if (meta.inverse) inverseSet.add(statKey)
 
     // Gather all players with non-null values for this stat
+    // Convert decimal-percentage stats to whole-number form (e.g. 0.43 → 43)
     const entries = []
     for (const row of allStats) {
-      const val = row[statKey]
-      if (val != null && !isNaN(val)) {
-        entries.push({ id: row.player_id, value: Number(val) })
+      const converted = pctConvert(row[statKey] != null ? Number(row[statKey]) : null, statKey)
+      if (converted != null && !isNaN(converted)) {
+        entries.push({ id: row.player_id, value: converted })
       }
     }
 
@@ -232,6 +235,31 @@ export function buildPercentileLookup(allStats) {
  *                     decision_making, hustle_impact }
  *                   Each value is a number 0-10 (rounded to 2 decimals) or null.
  */
+/**
+ * Range-based DRTG grade for SSA (matches RAUS engine logic).
+ * 90-95 → 9.0-10.0, 95-100 → 7.0-9.0, 100-105 → 5.0-7.0,
+ * 105-110 → 3.0-5.0, 110-115 → 1.0-3.0
+ */
+function gradeDRTG(drtg) {
+  if (drtg == null || isNaN(drtg)) return null
+  if (drtg <= 90)  return 10.0
+  if (drtg >= 115) return 1.0
+  const ranges = [
+    { lo: 90,  hi: 95,  gLo: 10.0, gHi: 9.0 },
+    { lo: 95,  hi: 100, gLo: 9.0,  gHi: 7.0 },
+    { lo: 100, hi: 105, gLo: 7.0,  gHi: 5.0 },
+    { lo: 105, hi: 110, gLo: 5.0,  gHi: 3.0 },
+    { lo: 110, hi: 115, gLo: 3.0,  gHi: 1.0 },
+  ]
+  for (const r of ranges) {
+    if (drtg >= r.lo && drtg < r.hi) {
+      const t = (drtg - r.lo) / (r.hi - r.lo)
+      return clamp(r.gLo + t * (r.gHi - r.gLo), 1.0, 10.0)
+    }
+  }
+  return 1.0
+}
+
 export function computeSingleAutoSSA(stats, percentiles) {
   const playerId = stats.player_id
   const result = {}
@@ -240,6 +268,13 @@ export function computeSingleAutoSSA(stats, percentiles) {
     const grades = []
 
     for (const s of catDef.stats) {
+      // Use range-based normalization for DRTG instead of percentile
+      if (s.key === 'drtg') {
+        const drtgGrade = gradeDRTG(stats.drtg)
+        if (drtgGrade != null) grades.push(drtgGrade)
+        continue
+      }
+
       const pctileMap = percentiles[s.key]
       if (!pctileMap) continue
 

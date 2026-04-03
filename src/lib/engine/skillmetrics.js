@@ -14,7 +14,27 @@
 //   computePTC(leagueConf) -> multiplier (number)
 // ---------------------------------------------------------------------------
 
-// ---- Normalization baselines (kept for ScoutingCard.jsx Nerd Stuff panel) --
+// ---- Stats stored as decimals that represent percentages -------------------
+// These are multiplied by 100 before normalization so 0.43 AST% → 43%.
+// This lookup is also exported for use by SSA auto engine and Nerd Stuff.
+
+export const DECIMAL_PCT_STATS = new Set([
+  'ast_pct', 'stl_pct', 'blk_pct', 'orb_pct', 'drb_pct', 'tov_pct',
+  'usg', 'ts_pct', 'efg_pct', 'fg_pct', 'three_pt_pct', 'ft_pct',
+  'three_pta_rate', 'ft_rate', 'three_pt_share_pct',
+  'at_rim_share_pct', 'inside_arc_share_pct',
+  'astd_at_rim_pct', 'astd_inside_arc_pct', 'astd_three_pct', 'astd_tot_pct',
+  'dunk_pct', 'two_pt_close_pct',
+])
+
+/** Convert a decimal-stored percentage to whole-number form for normalization. */
+export function pctConvert(value, key) {
+  if (value == null || isNaN(value)) return null
+  return DECIMAL_PCT_STATS.has(key) ? value * 100 : value
+}
+
+// ---- Normalization baselines (for ScoutingCard.jsx Nerd Stuff panel) -------
+// All values in whole-number percentage form (matching pctConvert output).
 
 export const BASELINES = {
   pts_per40:           { mean: 18.0,  std: 5.0  },
@@ -23,26 +43,26 @@ export const BASELINES = {
   stl_per40:           { mean: 1.5,   std: 0.6  },
   blk_per40:           { mean: 1.0,   std: 0.8  },
   tov_per40:           { mean: 3.0,   std: 1.0  },
-  usg:                 { mean: 0.22,  std: 0.05 },
+  usg:                 { mean: 22.0,  std: 5.0  },
   ast_pct:             { mean: 15.0,  std: 7.0  },
-  tov_pct:             { mean: 17.0,  std: 5.0  },
+  tov_pct:             { mean: 15.0,  std: 4.0  },
   ast_tov:             { mean: 1.2,   std: 0.5  },
-  ts_pct:              { mean: 0.54,  std: 0.05 },
-  efg_pct:             { mean: 0.50,  std: 0.05 },
-  ft_pct:              { mean: 0.72,  std: 0.08 },
-  ft_rate:             { mean: 0.35,  std: 0.10 },
-  three_pt_pct:        { mean: 0.33,  std: 0.06 },
-  three_pta_rate:      { mean: 0.35,  std: 0.10 },
-  three_pt_share_pct:  { mean: 0.30,  std: 0.10 },
+  ts_pct:              { mean: 54.0,  std: 5.0  },
+  efg_pct:             { mean: 50.0,  std: 5.0  },
+  ft_pct:              { mean: 72.0,  std: 8.0  },
+  ft_rate:             { mean: 35.0,  std: 10.0 },
+  three_pt_pct:        { mean: 33.0,  std: 6.0  },
+  three_pta_rate:      { mean: 35.0,  std: 10.0 },
+  three_pt_share_pct:  { mean: 30.0,  std: 10.0 },
   three_pta_per40:     { mean: 5.0,   std: 2.5  },
-  dunk_pct:            { mean: 0.60,  std: 0.15 },
+  dunk_pct:            { mean: 60.0,  std: 15.0 },
   dunks_per_game:      { mean: 1.0,   std: 0.8  },
-  two_pt_close_pct:    { mean: 0.55,  std: 0.10 },
-  at_rim_share_pct:    { mean: 0.30,  std: 0.12 },
-  astd_at_rim_pct:     { mean: 0.35,  std: 0.15 },
-  astd_inside_arc_pct: { mean: 0.30,  std: 0.15 },
-  astd_three_pct:      { mean: 0.60,  std: 0.15 },
-  astd_tot_pct:        { mean: 0.45,  std: 0.15 },
+  two_pt_close_pct:    { mean: 55.0,  std: 10.0 },
+  at_rim_share_pct:    { mean: 30.0,  std: 12.0 },
+  astd_at_rim_pct:     { mean: 35.0,  std: 15.0 },
+  astd_inside_arc_pct: { mean: 30.0,  std: 15.0 },
+  astd_three_pct:      { mean: 60.0,  std: 15.0 },
+  astd_tot_pct:        { mean: 45.0,  std: 15.0 },
   obpm:                { mean: 2.0,   std: 3.0  },
   dbpm:                { mean: 1.5,   std: 2.5  },
   dporpagatu:          { mean: 5.0,   std: 3.0  },
@@ -55,6 +75,7 @@ export const BASELINES = {
   drtg:                { mean: 100,   std: 5    },
   per:                 { mean: 17.0,  std: 5.0  },
   bpm:                 { mean: 2.0,   std: 3.0  },
+  pf_per40:            { mean: 4.5,   std: 1.2  },
 }
 
 // ---- Helpers -------------------------------------------------------------
@@ -110,6 +131,38 @@ function normalize(value, poolValues, inverse = false) {
   if (pctile == null) return null
   const effectivePctile = inverse ? (100 - pctile) : pctile
   return clamp(percentileToScore(effectivePctile), 1.0, 10.0)
+}
+
+/**
+ * Range-based DRTG normalization for college basketball.
+ * Uses piecewise linear interpolation within known DRTG ranges:
+ *   90-95  → 9.0-10.0 (elite defense)
+ *   95-100 → 7.0-9.0  (good)
+ *   100-105 → 5.0-7.0 (average)
+ *   105-110 → 3.0-5.0 (below average)
+ *   110-115 → 1.0-3.0 (poor)
+ *   115+    → 1.0
+ *   <90     → 10.0
+ */
+function normalizeDRTG(drtg) {
+  if (drtg == null || isNaN(drtg)) return null
+  if (drtg <= 90)  return 10.0
+  if (drtg >= 115) return 1.0
+  // Piecewise linear: higher DRTG = worse defense = lower score
+  const ranges = [
+    { lo: 90,  hi: 95,  scoreLo: 10.0, scoreHi: 9.0 },
+    { lo: 95,  hi: 100, scoreLo: 9.0,  scoreHi: 7.0 },
+    { lo: 100, hi: 105, scoreLo: 7.0,  scoreHi: 5.0 },
+    { lo: 105, hi: 110, scoreLo: 5.0,  scoreHi: 3.0 },
+    { lo: 110, hi: 115, scoreLo: 3.0,  scoreHi: 1.0 },
+  ]
+  for (const r of ranges) {
+    if (drtg >= r.lo && drtg < r.hi) {
+      const t = (drtg - r.lo) / (r.hi - r.lo)
+      return clamp(r.scoreLo + t * (r.scoreHi - r.scoreLo), 1.0, 10.0)
+    }
+  }
+  return 1.0
 }
 
 /**
@@ -169,8 +222,9 @@ function applyPositionMultiplier(raw, metricKey, bucket) {
 function extractPoolValues(allStats, key) {
   const values = []
   for (const row of allStats) {
-    if (row[key] != null && !isNaN(row[key])) {
-      values.push(row[key])
+    const v = pctConvert(row[key], key)
+    if (v != null && !isNaN(v)) {
+      values.push(v)
     }
   }
   return values
@@ -218,13 +272,13 @@ function buildPoolMap(allStats) {
  */
 function computeSCR(s, pool) {
   return weightedAverage([
-    { value: normalize(s.usg,                 pool.usg),                       weight: 0.20 },
-    { value: normalize(s.pts_per40,           pool.pts_per40),                 weight: 0.20 },
-    { value: normalize(s.at_rim_share_pct,    pool.at_rim_share_pct),          weight: 0.15 },
-    { value: normalize(s.astd_at_rim_pct,     pool.astd_at_rim_pct,     true), weight: 0.12 },
-    { value: normalize(s.astd_inside_arc_pct, pool.astd_inside_arc_pct, true), weight: 0.12 },
-    { value: normalize(s.astd_three_pct,      pool.astd_three_pct,      true), weight: 0.10 },
-    { value: normalize(s.astd_tot_pct,        pool.astd_tot_pct,        true), weight: 0.11 },
+    { value: normalize(pctConvert(s.usg, 'usg'),                               pool.usg),                       weight: 0.20 },
+    { value: normalize(pctConvert(s.pts_per40, 'pts_per40'),                   pool.pts_per40),                 weight: 0.20 },
+    { value: normalize(pctConvert(s.at_rim_share_pct, 'at_rim_share_pct'),     pool.at_rim_share_pct),          weight: 0.15 },
+    { value: normalize(pctConvert(s.astd_at_rim_pct, 'astd_at_rim_pct'),       pool.astd_at_rim_pct,     true), weight: 0.12 },
+    { value: normalize(pctConvert(s.astd_inside_arc_pct, 'astd_inside_arc_pct'), pool.astd_inside_arc_pct, true), weight: 0.12 },
+    { value: normalize(pctConvert(s.astd_three_pct, 'astd_three_pct'),         pool.astd_three_pct,      true), weight: 0.10 },
+    { value: normalize(pctConvert(s.astd_tot_pct, 'astd_tot_pct'),             pool.astd_tot_pct,        true), weight: 0.11 },
   ])
 }
 
@@ -234,11 +288,11 @@ function computeSCR(s, pool) {
  */
 function computeRPI(s, pool) {
   return weightedAverage([
-    { value: normalize(s.ft_rate,          pool.ft_rate),          weight: 0.20 },
-    { value: normalize(s.at_rim_share_pct, pool.at_rim_share_pct), weight: 0.25 },
-    { value: normalize(s.dunk_pct,         pool.dunk_pct),         weight: 0.15 },
-    { value: normalize(s.dunks_per_game,   pool.dunks_per_game),   weight: 0.20 },
-    { value: normalize(s.two_pt_close_pct, pool.two_pt_close_pct), weight: 0.20 },
+    { value: normalize(pctConvert(s.ft_rate, 'ft_rate'),                   pool.ft_rate),          weight: 0.20 },
+    { value: normalize(pctConvert(s.at_rim_share_pct, 'at_rim_share_pct'), pool.at_rim_share_pct), weight: 0.25 },
+    { value: normalize(pctConvert(s.dunk_pct, 'dunk_pct'),                 pool.dunk_pct),         weight: 0.15 },
+    { value: normalize(pctConvert(s.dunks_per_game, 'dunks_per_game'),     pool.dunks_per_game),   weight: 0.20 },
+    { value: normalize(pctConvert(s.two_pt_close_pct, 'two_pt_close_pct'), pool.two_pt_close_pct), weight: 0.20 },
   ])
 }
 
@@ -248,11 +302,11 @@ function computeRPI(s, pool) {
  */
 function computeSCI(s, pool) {
   return weightedAverage([
-    { value: normalize(s.usg,       pool.usg),       weight: 0.20 },
-    { value: normalize(s.ast_pct,   pool.ast_pct),   weight: 0.25 },
-    { value: normalize(s.ast_tov,   pool.ast_tov),   weight: 0.20 },
-    { value: normalize(s.pts_per40, pool.pts_per40), weight: 0.20 },
-    { value: normalize(s.efg_pct,   pool.efg_pct),   weight: 0.15 },
+    { value: normalize(pctConvert(s.usg, 'usg'),             pool.usg),       weight: 0.20 },
+    { value: normalize(pctConvert(s.ast_pct, 'ast_pct'),     pool.ast_pct),   weight: 0.25 },
+    { value: normalize(pctConvert(s.ast_tov, 'ast_tov'),     pool.ast_tov),   weight: 0.20 },
+    { value: normalize(pctConvert(s.pts_per40, 'pts_per40'), pool.pts_per40), weight: 0.20 },
+    { value: normalize(pctConvert(s.efg_pct, 'efg_pct'),     pool.efg_pct),   weight: 0.15 },
   ])
 }
 
@@ -262,12 +316,12 @@ function computeSCI(s, pool) {
  */
 function computeUCS(s, pool) {
   return weightedAverage([
-    { value: normalize(s.three_pt_pct,       pool.three_pt_pct),       weight: 0.25 },
-    { value: normalize(s.three_pta_rate,     pool.three_pta_rate),     weight: 0.15 },
-    { value: normalize(s.efg_pct,            pool.efg_pct),            weight: 0.15 },
-    { value: normalize(s.ft_pct,             pool.ft_pct),             weight: 0.15 },
-    { value: normalize(s.three_pt_share_pct, pool.three_pt_share_pct), weight: 0.15 },
-    { value: normalize(s.three_pta_per40,    pool.three_pta_per40),    weight: 0.15 },
+    { value: normalize(pctConvert(s.three_pt_pct, 'three_pt_pct'),             pool.three_pt_pct),       weight: 0.25 },
+    { value: normalize(pctConvert(s.three_pta_rate, 'three_pta_rate'),         pool.three_pta_rate),     weight: 0.15 },
+    { value: normalize(pctConvert(s.efg_pct, 'efg_pct'),                       pool.efg_pct),            weight: 0.15 },
+    { value: normalize(pctConvert(s.ft_pct, 'ft_pct'),                         pool.ft_pct),             weight: 0.15 },
+    { value: normalize(pctConvert(s.three_pt_share_pct, 'three_pt_share_pct'), pool.three_pt_share_pct), weight: 0.15 },
+    { value: normalize(pctConvert(s.three_pta_per40, 'three_pta_per40'),       pool.three_pta_per40),    weight: 0.15 },
   ])
 }
 
@@ -277,11 +331,11 @@ function computeUCS(s, pool) {
  */
 function computeFCS(s, pool) {
   return weightedAverage([
-    { value: normalize(s.two_pt_close_pct, pool.two_pt_close_pct), weight: 0.25 },
-    { value: normalize(s.dunk_pct,         pool.dunk_pct),         weight: 0.20 },
-    { value: normalize(s.ft_rate,          pool.ft_rate),          weight: 0.20 },
-    { value: normalize(s.dunks_per_game,   pool.dunks_per_game),   weight: 0.15 },
-    { value: normalize(s.at_rim_share_pct, pool.at_rim_share_pct), weight: 0.20 },
+    { value: normalize(pctConvert(s.two_pt_close_pct, 'two_pt_close_pct'), pool.two_pt_close_pct), weight: 0.25 },
+    { value: normalize(pctConvert(s.dunk_pct, 'dunk_pct'),                 pool.dunk_pct),         weight: 0.20 },
+    { value: normalize(pctConvert(s.ft_rate, 'ft_rate'),                   pool.ft_rate),          weight: 0.20 },
+    { value: normalize(pctConvert(s.dunks_per_game, 'dunks_per_game'),     pool.dunks_per_game),   weight: 0.15 },
+    { value: normalize(pctConvert(s.at_rim_share_pct, 'at_rim_share_pct'), pool.at_rim_share_pct), weight: 0.20 },
   ])
 }
 
@@ -292,11 +346,11 @@ function computeFCS(s, pool) {
  */
 function computeADR(s, pool) {
   return weightedAverage([
-    { value: normalize(s.ast_tov,  pool.ast_tov),          weight: 0.25 },
-    { value: normalize(s.tov_pct,  pool.tov_pct,    true), weight: 0.20 },
-    { value: normalize(s.ast_pct,  pool.ast_pct),          weight: 0.20 },
-    { value: normalize(s.usg,     pool.usg),               weight: 0.15 },
-    { value: normalize(s.obpm,    pool.obpm),               weight: 0.20 },
+    { value: normalize(pctConvert(s.ast_tov, 'ast_tov'), pool.ast_tov),          weight: 0.25 },
+    { value: normalize(pctConvert(s.tov_pct, 'tov_pct'), pool.tov_pct,    true), weight: 0.20 },
+    { value: normalize(pctConvert(s.ast_pct, 'ast_pct'), pool.ast_pct),          weight: 0.20 },
+    { value: normalize(pctConvert(s.usg, 'usg'),         pool.usg),               weight: 0.15 },
+    { value: normalize(pctConvert(s.obpm, 'obpm'),       pool.obpm),               weight: 0.20 },
   ])
 }
 
@@ -306,12 +360,12 @@ function computeADR(s, pool) {
  */
 function computeSTI(s, pool) {
   return weightedAverage([
-    { value: normalize(s.stl_per40,   pool.stl_per40),   weight: 0.18 },
-    { value: normalize(s.blk_per40,   pool.blk_per40),   weight: 0.18 },
-    { value: normalize(s.stl_pct,     pool.stl_pct),     weight: 0.15 },
-    { value: normalize(s.blk_pct,     pool.blk_pct),     weight: 0.15 },
-    { value: normalize(s.dbpm,        pool.dbpm),         weight: 0.17 },
-    { value: normalize(s.dporpagatu,  pool.dporpagatu),   weight: 0.17 },
+    { value: normalize(pctConvert(s.stl_per40, 'stl_per40'),     pool.stl_per40),   weight: 0.18 },
+    { value: normalize(pctConvert(s.blk_per40, 'blk_per40'),     pool.blk_per40),   weight: 0.18 },
+    { value: normalize(pctConvert(s.stl_pct, 'stl_pct'),         pool.stl_pct),     weight: 0.15 },
+    { value: normalize(pctConvert(s.blk_pct, 'blk_pct'),         pool.blk_pct),     weight: 0.15 },
+    { value: normalize(pctConvert(s.dbpm, 'dbpm'),               pool.dbpm),         weight: 0.17 },
+    { value: normalize(pctConvert(s.dporpagatu, 'dporpagatu'),   pool.dporpagatu),   weight: 0.17 },
   ])
 }
 
@@ -321,11 +375,11 @@ function computeSTI(s, pool) {
  */
 function computeRSM(s, pool) {
   return weightedAverage([
-    { value: normalize(s.reb_per40, pool.reb_per40), weight: 0.25 },
-    { value: normalize(s.orb_pct,   pool.orb_pct),   weight: 0.20 },
-    { value: normalize(s.drb_pct,   pool.drb_pct),   weight: 0.20 },
-    { value: normalize(s.orb_total, pool.orb_total), weight: 0.15 },
-    { value: normalize(s.drb_total, pool.drb_total), weight: 0.20 },
+    { value: normalize(pctConvert(s.reb_per40, 'reb_per40'), pool.reb_per40), weight: 0.25 },
+    { value: normalize(pctConvert(s.orb_pct, 'orb_pct'),     pool.orb_pct),   weight: 0.20 },
+    { value: normalize(pctConvert(s.drb_pct, 'drb_pct'),     pool.drb_pct),   weight: 0.20 },
+    { value: normalize(pctConvert(s.orb_total, 'orb_total'), pool.orb_total), weight: 0.15 },
+    { value: normalize(pctConvert(s.drb_total, 'drb_total'), pool.drb_total), weight: 0.20 },
   ])
 }
 
@@ -347,12 +401,12 @@ function computeDRI(s, pool) {
     : null
 
   return weightedAverage([
-    { value: normalize(s.dbpm,       pool.dbpm),                weight: 0.20 },
-    { value: normalize(s.dporpagatu, pool.dporpagatu),          weight: 0.18 },
-    { value: normalize(s.stl_per40,  pool.stl_per40),           weight: 0.15 },
-    { value: normalize(s.blk_per40,  pool.blk_per40),           weight: 0.15 },
-    { value: normalize(s.drtg,       pool.drtg,          true), weight: 0.17 },
-    { value: pfNorm,                                            weight: 0.15 },
+    { value: normalize(pctConvert(s.dbpm, 'dbpm'),             pool.dbpm),       weight: 0.20 },
+    { value: normalize(pctConvert(s.dporpagatu, 'dporpagatu'), pool.dporpagatu), weight: 0.18 },
+    { value: normalize(pctConvert(s.stl_per40, 'stl_per40'),   pool.stl_per40),  weight: 0.15 },
+    { value: normalize(pctConvert(s.blk_per40, 'blk_per40'),   pool.blk_per40),  weight: 0.15 },
+    { value: normalizeDRTG(s.drtg),                                              weight: 0.17 },
+    { value: pfNorm,                                                             weight: 0.15 },
   ])
 }
 

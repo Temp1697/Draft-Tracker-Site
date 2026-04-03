@@ -13,6 +13,8 @@ import { computeSizeMultiplier } from '../lib/engine/bigboard'
 import { rausTier, ssaTier, compositeTier, lciTier, wshTier, starIndexTier, ppiTier } from '../lib/tiers'
 import { getPositionalDefaults } from '../lib/positionalDefaults'
 import { fillDefaultsSync } from '../lib/fillDefaults'
+import { pctConvert } from '../lib/engine/skillmetrics'
+import CompSwapModal from '../components/CompSwapModal'
 
 /* ── Constants for detail panels ── */
 
@@ -64,26 +66,26 @@ const BASELINES = {
   stl_per40:           { mean: 1.5,   std: 0.6  },
   blk_per40:           { mean: 1.0,   std: 0.8  },
   tov_per40:           { mean: 3.0,   std: 1.0  },
-  usg:                 { mean: 0.22,  std: 0.05 },
+  usg:                 { mean: 22.0,  std: 5.0  },
   ast_pct:             { mean: 15.0,  std: 7.0  },
-  tov_pct:             { mean: 17.0,  std: 5.0  },
+  tov_pct:             { mean: 15.0,  std: 4.0  },
   ast_tov:             { mean: 1.2,   std: 0.5  },
-  ts_pct:              { mean: 0.54,  std: 0.05 },
-  efg_pct:             { mean: 0.50,  std: 0.05 },
-  ft_pct:              { mean: 0.72,  std: 0.08 },
-  ft_rate:             { mean: 0.35,  std: 0.10 },
-  three_pt_pct:        { mean: 0.33,  std: 0.06 },
-  three_pta_rate:      { mean: 0.35,  std: 0.10 },
-  three_pt_share_pct:  { mean: 0.30,  std: 0.10 },
+  ts_pct:              { mean: 54.0,  std: 5.0  },
+  efg_pct:             { mean: 50.0,  std: 5.0  },
+  ft_pct:              { mean: 72.0,  std: 8.0  },
+  ft_rate:             { mean: 35.0,  std: 10.0 },
+  three_pt_pct:        { mean: 33.0,  std: 6.0  },
+  three_pta_rate:      { mean: 35.0,  std: 10.0 },
+  three_pt_share_pct:  { mean: 30.0,  std: 10.0 },
   three_pta_per40:     { mean: 5.0,   std: 2.5  },
-  dunk_pct:            { mean: 0.60,  std: 0.15 },
+  dunk_pct:            { mean: 60.0,  std: 15.0 },
   dunks_per_game:      { mean: 1.0,   std: 0.8  },
-  two_pt_close_pct:    { mean: 0.55,  std: 0.10 },
-  at_rim_share_pct:    { mean: 0.30,  std: 0.12 },
-  astd_at_rim_pct:     { mean: 0.35,  std: 0.15 },
-  astd_inside_arc_pct: { mean: 0.30,  std: 0.15 },
-  astd_three_pct:      { mean: 0.60,  std: 0.15 },
-  astd_tot_pct:        { mean: 0.45,  std: 0.15 },
+  two_pt_close_pct:    { mean: 55.0,  std: 10.0 },
+  at_rim_share_pct:    { mean: 30.0,  std: 12.0 },
+  astd_at_rim_pct:     { mean: 35.0,  std: 15.0 },
+  astd_inside_arc_pct: { mean: 30.0,  std: 15.0 },
+  astd_three_pct:      { mean: 60.0,  std: 15.0 },
+  astd_tot_pct:        { mean: 45.0,  std: 15.0 },
   obpm:                { mean: 2.0,   std: 3.0  },
   dbpm:                { mean: 1.5,   std: 2.5  },
   dporpagatu:          { mean: 5.0,   std: 3.0  },
@@ -236,10 +238,12 @@ function nerdNormalize(value, statKey, inverse = false) {
   if (value == null || isNaN(value)) return null
   const b = BASELINES[statKey]
   if (!b) return null
+  // Convert decimal-stored percentages to whole-number form before z-score
+  const v = pctConvert(value, statKey) ?? value
   if (inverse) {
-    return Math.min(10, Math.max(0, 5 - ((value - b.mean) / b.std) * 2.0))
+    return Math.min(10, Math.max(0, 5 - ((v - b.mean) / b.std) * 2.0))
   }
-  return Math.min(10, Math.max(0, 5 + ((value - b.mean) / b.std) * 2.0))
+  return Math.min(10, Math.max(0, 5 + ((v - b.mean) / b.std) * 2.0))
 }
 
 function getStatValue(stats, key) {
@@ -821,6 +825,9 @@ export default function ScoutingCard() {
   const [loading, setLoading] = useState(true)
   const [rausDetailsOpen, setRausDetailsOpen] = useState(false)
   const [ssaDetailsOpen, setSsaDetailsOpen] = useState(false)
+  const [compSwapOpen, setCompSwapOpen] = useState(false)
+  const [compSwapSlot, setCompSwapSlot] = useState(null) // 'star' | 'average' | 'bust'
+  const [manualComps, setManualComps] = useState({}) // { star: hp, average: hp, bust: hp }
 
   useEffect(() => {
     async function load() {
@@ -880,6 +887,80 @@ export default function ScoutingCard() {
     }
     load()
   }, [playerId])
+
+  // Load manual comp overrides from DB
+  useEffect(() => {
+    if (!playerId) return
+    supabase
+      .from('player_comps')
+      .select('comp_slot, historical_players(*)')
+      .eq('player_id', playerId)
+      .eq('is_manual', true)
+      .then(({ data: manuals }) => {
+        if (!manuals || manuals.length === 0) return
+        const overrides = {}
+        for (const m of manuals) {
+          if (m.comp_slot && m.historical_players) {
+            overrides[m.comp_slot] = m.historical_players
+          }
+        }
+        setManualComps(overrides)
+      })
+  }, [playerId])
+
+  async function handleCompSwap(historicalPlayer) {
+    const slot = compSwapSlot
+    setCompSwapOpen(false)
+    if (!slot || !historicalPlayer) return
+
+    // Save to database
+    // First remove any existing manual override for this slot
+    await supabase
+      .from('player_comps')
+      .delete()
+      .eq('player_id', playerId)
+      .eq('comp_slot', slot)
+      .eq('is_manual', true)
+
+    // Insert new manual override
+    await supabase
+      .from('player_comps')
+      .insert({
+        player_id: playerId,
+        historical_player_id: historicalPlayer.id,
+        comp_slot: slot,
+        is_manual: true,
+        comp_tier: historicalPlayer.tier || 'modern',
+        similarity_distance: 0,
+      })
+
+    setManualComps(prev => ({ ...prev, [slot]: historicalPlayer }))
+  }
+
+  async function handleResetComp(slot) {
+    await supabase
+      .from('player_comps')
+      .delete()
+      .eq('player_id', playerId)
+      .eq('comp_slot', slot)
+      .eq('is_manual', true)
+
+    setManualComps(prev => {
+      const next = { ...prev }
+      delete next[slot]
+      return next
+    })
+  }
+
+  async function handleResetAllComps() {
+    await supabase
+      .from('player_comps')
+      .delete()
+      .eq('player_id', playerId)
+      .eq('is_manual', true)
+
+    setManualComps({})
+  }
 
   if (loading) return <div className="bb-loading">Loading scouting card...</div>
   if (!data?.player) return <div className="bb-loading">Player not found</div>
@@ -1145,31 +1226,52 @@ export default function ScoutingCard() {
                 'Role Player': 4, 'Out of League': 5, 'Bust': 6,
               }
               const sorted = [...comps]
-                .filter(c => c.historical_players)
+                .filter(c => c.historical_players && !c.is_manual)
                 .sort((a, b) => {
                   const aO = outcomeOrder[a.historical_players.nba_outcome_label] ?? 3
                   const bO = outcomeOrder[b.historical_players.nba_outcome_label] ?? 3
                   return aO - bO
                 })
 
-              if (sorted.length === 0) return <div className="sc-section-empty">No historical comps available</div>
-
-              const star = sorted[0]
-              const bust = sorted[sorted.length - 1]
-              const avg = sorted[Math.floor(sorted.length / 2)]
+              const autoStar = sorted[0]?.historical_players
+              const autoBust = sorted[sorted.length - 1]?.historical_players
+              const autoAvg = sorted[Math.floor(sorted.length / 2)]?.historical_players
+              const autoSimStar = sorted[0]?.similarity_distance
+              const autoSimAvg = sorted[Math.floor(sorted.length / 2)]?.similarity_distance
+              const autoSimBust = sorted[sorted.length - 1]?.similarity_distance
 
               const shades = [
-                { label: 'The Star', icon: '⭐', comp: star, color: '#DFFF00' },
-                { label: 'The Average', icon: '📊', comp: avg, color: '#60A5FA' },
-                { label: 'The Bust', icon: '📉', comp: bust, color: '#F87171' },
-              ].filter(s => s.comp)
+                { label: 'The Star', slot: 'star', icon: '⭐', hp: manualComps.star || autoStar, isManual: !!manualComps.star, simDist: manualComps.star ? null : autoSimStar, color: '#DFFF00' },
+                { label: 'The Average', slot: 'average', icon: '📊', hp: manualComps.average || autoAvg, isManual: !!manualComps.average, simDist: manualComps.average ? null : autoSimAvg, color: '#60A5FA' },
+                { label: 'The Bust', slot: 'bust', icon: '📉', hp: manualComps.bust || autoBust, isManual: !!manualComps.bust, simDist: manualComps.bust ? null : autoSimBust, color: '#F87171' },
+              ].filter(s => s.hp)
+
+              if (shades.length === 0) return <div className="sc-section-empty">No historical comps available</div>
 
               return shades.map(shade => {
-                const hp = shade.comp.historical_players
+                const hp = shade.hp
                 if (!hp) return null
                 const stkpg = ((hp.spg_first4 ?? 0) + (hp.bpg_first4 ?? 0)).toFixed(1)
                 return (
                   <div key={shade.label} className="sc-shade-card" style={{ borderColor: shade.color + '40' }}>
+                    <div className="sc-shade-header">
+                      <span className="sc-shade-label" style={{ color: shade.color }}>{shade.label}</span>
+                      <div className="sc-shade-actions">
+                        {shade.isManual && (
+                          <span className="sc-shade-manual-tag">Manual</span>
+                        )}
+                        <button
+                          className="sc-shade-btn"
+                          onClick={() => { setCompSwapSlot(shade.slot); setCompSwapOpen(true) }}
+                        >Swap</button>
+                        {shade.isManual && (
+                          <button
+                            className="sc-shade-btn sc-shade-btn-reset"
+                            onClick={() => handleResetComp(shade.slot)}
+                          >Reset</button>
+                        )}
+                      </div>
+                    </div>
                     <div className="sc-shade-name">{hp.name}</div>
                     <div className="sc-shade-meta">
                       {hp.draft_year && <span>Draft {hp.draft_year}</span>}
@@ -1186,8 +1288,8 @@ export default function ScoutingCard() {
                     <div className="sc-shade-similarity">
                       <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
                         {hp.nba_outcome_label && <span style={{ marginRight: 8 }}>{hp.nba_outcome_label}</span>}
-                        {shade.comp.similarity_distance != null && (
-                          <>Similarity: {Math.max(0, (100 - shade.comp.similarity_distance * 10)).toFixed(0)}%</>
+                        {shade.simDist != null && (
+                          <>Similarity: {Math.max(0, (100 - shade.simDist * 10)).toFixed(0)}%</>
                         )}
                       </span>
                     </div>
@@ -1196,8 +1298,22 @@ export default function ScoutingCard() {
               })
             })()}
           </div>
+          {Object.keys(manualComps).length > 0 && (
+            <button
+              className="sc-shade-reset-all"
+              onClick={handleResetAllComps}
+            >Reset All Comps to Auto</button>
+          )}
         </div>
       )}
+
+      <CompSwapModal
+        open={compSwapOpen}
+        onClose={() => setCompSwapOpen(false)}
+        onSelect={handleCompSwap}
+        currentPlayerId={playerId}
+        currentComps={comps}
+      />
 
       {/* DNA Archetypes */}
       <div className="sc-card" style={{ gridColumn: '1 / -1' }}>

@@ -77,11 +77,11 @@ export function ssaTier(ssaFinal) {
 
 // ---- Big Board Composite Tiers -------------------------------------------
 export const COMPOSITE_TIERS = [
-  { min: 8.50, label: 'Franchise Cornerstone', color: '#DFFF00' },
-  { min: 7.50, label: 'Lottery Lock',          color: '#2DD4BF' },
+  { min: 8.50, label: 'Franchise Cornerstone', color: '#FFD700' },
+  { min: 7.00, label: 'Lottery Lock',          color: '#166534' },
   { min: 6.50, label: 'First Round Value',     color: '#34D399' },
-  { min: 5.80, label: 'Second Round Value',    color: '#60A5FA' },
-  { min: 5.00, label: 'Draft-and-Stash',       color: '#FBBF24' },
+  { min: 5.90, label: 'Second Round Value',    color: '#60A5FA' },
+  { min: 4.90, label: 'Draft-and-Stash',       color: '#FBBF24' },
   { min: -Infinity, label: 'Camp Invite',      color: '#F87171' },
 ]
 
