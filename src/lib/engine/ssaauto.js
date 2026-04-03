@@ -15,7 +15,7 @@
 //   100th percentile -> ~9.5
 // ---------------------------------------------------------------------------
 
-import { pctConvert } from './skillmetrics.js'
+import { pctConvert, BASELINES } from './skillmetrics.js'
 
 // ---- Category Definitions ------------------------------------------------
 // Each category lists the stats that feed into it.
@@ -260,6 +260,21 @@ function gradeDRTG(drtg) {
   return 1.0
 }
 
+/**
+ * Compute a z-score based grade for a stat using BASELINES.
+ * Same formula as RAUS: grade = 5 + z * 2.5, clamped [0, 10]
+ * For inverse stats, the z-score is negated.
+ */
+function baselineGrade(value, statKey, inverse) {
+  const converted = pctConvert(value, statKey)
+  if (converted == null || isNaN(converted)) return null
+  const b = BASELINES[statKey]
+  if (!b || b.std <= 0) return null
+  const z = (converted - b.mean) / b.std
+  const effectiveZ = inverse ? -z : z
+  return clamp(5.0 + effectiveZ * 2.5, 0, 10)
+}
+
 export function computeSingleAutoSSA(stats, percentiles) {
   const playerId = stats.player_id
   const result = {}
@@ -268,13 +283,22 @@ export function computeSingleAutoSSA(stats, percentiles) {
     const grades = []
 
     for (const s of catDef.stats) {
-      // Use range-based normalization for DRTG instead of percentile
+      // Use range-based normalization for DRTG
       if (s.key === 'drtg') {
         const drtgGrade = gradeDRTG(stats.drtg)
         if (drtgGrade != null) grades.push(drtgGrade)
         continue
       }
 
+      // Try z-score BASELINES first (gives absolute quality measure)
+      const rawVal = stats[s.key]
+      const blGrade = baselineGrade(rawVal, s.key, s.inverse)
+      if (blGrade != null) {
+        grades.push(blGrade)
+        continue
+      }
+
+      // Fallback to percentile-based grade
       const pctileMap = percentiles[s.key]
       if (!pctileMap) continue
 
