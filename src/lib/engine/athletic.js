@@ -154,6 +154,68 @@ export function computeAthleticScores(meas) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 50th-percentile combine measurables by position
+// Used to fill missing testing data so every player gets a computed score.
+// As real combine data comes in, these placeholders get replaced.
+// ---------------------------------------------------------------------------
+export const COMBINE_DEFAULTS = {
+  Guard: {
+    height: 75,       // 6'3"
+    weight: 195,
+    wingspan: 79,     // +4"
+    max_vertical: 38,
+    vertical: 32,
+    three_quarter_sprint: 3.20,
+    lane_agility: 10.90,
+    shuttle: 3.10,
+  },
+  Wing: {
+    height: 79,       // 6'7"
+    weight: 215,
+    wingspan: 83,     // +4"
+    max_vertical: 36,
+    vertical: 30,
+    three_quarter_sprint: 3.28,
+    lane_agility: 11.10,
+    shuttle: 3.18,
+  },
+  Big: {
+    height: 82,       // 6'10"
+    weight: 240,
+    wingspan: 87,     // +5"
+    max_vertical: 33,
+    vertical: 28,
+    three_quarter_sprint: 3.38,
+    lane_agility: 11.40,
+    shuttle: 3.28,
+  },
+}
+
+/**
+ * Build a complete measurables object by merging real data with positional
+ * defaults for any missing fields. Returns the merged object and a list
+ * of which fields were estimated.
+ */
+export function fillAthleticDefaults(meas, bucket) {
+  const defaults = COMBINE_DEFAULTS[bucket] || COMBINE_DEFAULTS.Wing
+  const filled = { ...defaults }
+  const estimated = []
+
+  const FIELDS = ['height', 'weight', 'wingspan', 'max_vertical', 'vertical',
+    'three_quarter_sprint', 'lane_agility', 'shuttle']
+
+  for (const f of FIELDS) {
+    if (meas && meas[f] != null) {
+      filled[f] = meas[f]
+    } else {
+      estimated.push(f)
+    }
+  }
+
+  return { filled, estimated }
+}
+
 /**
  * Positional average athletic defaults (0-10 scale) for players
  * with NO measurables data at all. Represents 50th percentile.

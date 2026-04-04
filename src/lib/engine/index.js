@@ -16,7 +16,7 @@ import { computeSkillMetrics, computePTC } from './skillmetrics.js'
 import { computeAutoSSAGrades } from './ssaauto.js'
 import { getPositionalDefaults } from '../positionalDefaults.js'
 import { fillDefaultsSync } from '../fillDefaults.js'
-import { computeAthleticScores, ATHLETIC_DEFAULTS } from './athletic.js'
+import { computeAthleticScores, ATHLETIC_DEFAULTS, fillAthleticDefaults } from './athletic.js'
 
 /**
  * Run full recalculation for all players.
@@ -70,18 +70,22 @@ export async function recalculateAll(onProgress) {
   const fullMeasForAthMap = new Map((fullMeasForAthletic || []).map(r => [r.player_id, r]))
 
   const athleticUpserts = []
-  let computedCount = 0, defaultCount = 0
+  let computedCount = 0, filledCount = 0
 
   for (const player of players) {
     const pid = player.player_id
     const meas = fullMeasForAthMap.get(pid)
-    const existing = athleticMap.get(pid)
+    const bucket = player.primary_bucket || 'Wing'
 
-    // Try to compute from raw measurables
-    const computed = computeAthleticScores(meas)
+    // Fill missing measurables with 50th-percentile positional defaults
+    // so every player gets a full computation chain
+    const { filled } = fillAthleticDefaults(meas, bucket)
+
+    // Compute OAI/AAA from merged measurables (real + defaults)
+    const computed = computeAthleticScores(filled)
 
     if (computed && computed.oai != null) {
-      // Successfully computed from measurables
+      const hasRealData = meas && (meas.three_quarter_sprint != null || meas.max_vertical != null || meas.vertical != null || meas.lane_agility != null || meas.shuttle != null)
       const entry = {
         player_id: pid,
         mas_sqrt: computed.mas_sqrt,
@@ -92,25 +96,15 @@ export async function recalculateAll(onProgress) {
       }
       athleticMap.set(pid, entry)
       athleticUpserts.push(entry)
-      computedCount++
-    } else if (!existing || existing.oai == null) {
-      // No measurables and no existing scores — use positional default
-      const defaults = ATHLETIC_DEFAULTS[player.primary_bucket] || ATHLETIC_DEFAULTS.Wing
-      const entry = {
-        player_id: pid,
-        oai: defaults.oai,
-        aaa: defaults.aaa,
-      }
-      athleticMap.set(pid, entry)
-      athleticUpserts.push(entry)
-      defaultCount++
+      if (hasRealData) computedCount++
+      else filledCount++
     }
   }
 
   if (athleticUpserts.length > 0) {
     const { error: athErr } = await supabase.from('athletic_scores').upsert(athleticUpserts, { onConflict: 'player_id' })
     if (athErr) errors.push(`Athletic scores upsert: ${athErr.message}`)
-    else progress(`  Athletic: ${computedCount} computed from measurables, ${defaultCount} filled with positional averages`)
+    else progress(`  Athletic: ${computedCount} from real data, ${filledCount} from positional defaults`)
   }
 
   // -----------------------------------------------------------------------
