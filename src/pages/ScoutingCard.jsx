@@ -1030,7 +1030,11 @@ export default function ScoutingCard() {
               </span>
             )}
             {prospect?.class && <span className="sc-class">{prospect.class.toUpperCase()}</span>}
-            {player.birth_year && <span>b. {player.birth_year}</span>}
+            {player.birth_year && player.draft_class && player.draft_status !== 'prospect' && parseInt(player.draft_class) <= new Date().getFullYear() ? (
+              <span>Age {parseInt(player.draft_class) - player.birth_year} at draft</span>
+            ) : player.birth_year ? (
+              <span>b. {player.birth_year}</span>
+            ) : null}
           </div>
         </div>
       </div>
