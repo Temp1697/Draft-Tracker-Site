@@ -275,7 +275,11 @@ export default function LegendaryArchives() {
                   <td>{scoreCell(p.raus_final)}</td>
                   <td>{scoreCell(p.ssa)}</td>
                   <td style={{ fontWeight: 600 }}>{scoreCell(p.composite_score)}</td>
-                  <td>{ct ? <TierBadge label={ct.label} color={ct.color} /> : '--'}</td>
+                  <td>{ct ? (
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 4, background: ct.color + '18', color: ct.color, whiteSpace: 'nowrap' }}>
+                      {ct.label}
+                    </span>
+                  ) : p.tier ? <TierBadge tier={p.tier} /> : '--'}</td>
                   <td className="bb-actual">
                     {p.actual_pick ? (
                       <span>#{p.actual_pick}{p.draft_team ? ` ${p.draft_team}` : ''}</span>
