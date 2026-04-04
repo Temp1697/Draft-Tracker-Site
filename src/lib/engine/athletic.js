@@ -4,13 +4,14 @@
 // Computes OAI (Overall Athleticism Index) and AAA (Advanced Athletic
 // Aggregate) from raw combine measurables stored in the measurables table.
 //
-// Sub-metrics:
+// Sub-metrics (raw):
 //   MAS  = √(weight / 200) ÷ sprint_time          (mass-adjusted speed)
 //   MAV  = (vertical ÷ height) × √(weight / 200)  (mass-adjusted vertical)
 //   MAMI = (height × √(weight / 200)) ÷ agility   (mass-adjusted mobility)
 //
-// OAI  = MAS × 0.4 + MAV × 0.4 + MAMI × 0.2
-// AAA  = OAI × 0.6 + MAMI × 0.2 + SizeScore × 0.2
+// Each sub-metric is normalized to 0-10 via z-score, then combined:
+//   OAI  = norm(MAS) × 0.4 + norm(MAV) × 0.4 + norm(MAMI) × 0.2
+//   AAA  = OAI × 0.6 + norm(MAMI) × 0.2 + norm(SizeScore) × 0.2
 // ---------------------------------------------------------------------------
 
 function round(v, d = 4) {
@@ -30,7 +31,6 @@ export function computeMAS(weight, sprintTime) {
 /**
  * Compute MAV (Mass-Adjusted Vertical)
  * MAV = (vertical ÷ height) × √(weight / 200)
- * Uses max_vertical if available, otherwise standing vertical
  */
 export function computeMAV(vertical, height, weight) {
   if (!vertical || !height || !weight || height === 0) return null
@@ -40,7 +40,6 @@ export function computeMAV(vertical, height, weight) {
 /**
  * Compute MAMI (Mass-Adjusted Mobility Index)
  * MAMI = (height × √(weight / 200)) ÷ agility_time
- * Uses lane_agility if available, otherwise shuttle
  */
 export function computeMAMI(height, weight, agilityTime) {
   if (!height || !weight || !agilityTime || agilityTime === 0) return null
@@ -53,71 +52,49 @@ export function computeMAMI(height, weight, agilityTime) {
  */
 export function computeSizeScore(height, wingspan) {
   if (!height || height === 0) return null
-  const ws = wingspan || height // fallback to height if no wingspan
+  const ws = wingspan || height
   return (height / 80) + (ws / height)
 }
 
-/**
- * Compute raw OAI from sub-metrics
- * OAI = MAS × 0.4 + MAV × 0.4 + MAMI × 0.2
- */
-export function computeRawOAI(mas, mav, mami) {
-  if (mas == null && mav == null && mami == null) return null
-
-  // If we have at least one component, weight proportionally
-  let total = 0, weightSum = 0
-  if (mas != null) { total += mas * 0.4; weightSum += 0.4 }
-  if (mav != null) { total += mav * 0.4; weightSum += 0.4 }
-  if (mami != null) { total += mami * 0.2; weightSum += 0.2 }
-
-  if (weightSum === 0) return null
-  return total / weightSum // normalize if missing components
-}
-
-/**
- * Compute raw AAA from OAI, MAMI, and SizeScore
- * AAA = OAI × 0.6 + MAMI × 0.2 + SizeScore × 0.2
- */
-export function computeRawAAA(oai, mami, sizeScore) {
-  if (oai == null) return null
-
-  let total = oai * 0.6, weightSum = 0.6
-  if (mami != null) { total += mami * 0.2; weightSum += 0.2 }
-  if (sizeScore != null) { total += sizeScore * 0.2; weightSum += 0.2 }
-
-  return total / weightSum
-}
-
 // ---------------------------------------------------------------------------
-// Normalization: Convert raw values to 0-10 scale using z-score approach
-// These baselines are derived from typical NBA combine distributions
+// Sub-metric baselines for z-score normalization
+//
+// Derived from typical NBA combine distributions. The 50th-percentile
+// positional defaults should produce values very close to these means,
+// giving a normalized score of ~5.0 (by design).
+//
+// Guard defaults:  MAS=0.309, MAV=0.500, MAMI=6.794, Size=1.991
+// Wing defaults:   MAS=0.316, MAV=0.473, MAMI=7.379, Size=2.038
+// Big defaults:    MAS=0.324, MAV=0.441, MAMI=7.879, Size=2.086
+// Average:         MAS≈0.316, MAV≈0.471, MAMI≈7.35,  Size≈2.04
 // ---------------------------------------------------------------------------
-
-const RAW_BASELINES = {
-  mas:  { mean: 0.295, std: 0.025 },  // typical range ~0.24-0.35
-  mav:  { mean: 0.42,  std: 0.05  },  // typical range ~0.30-0.55
-  mami: { mean: 7.2,   std: 0.6   },  // typical range ~5.8-8.8
-  oai:  { mean: 0.80,  std: 0.10  },  // weighted composite
-  sizeScore: { mean: 2.28, std: 0.10 }, // typical ~2.05-2.55
-  aaa:  { mean: 1.20,  std: 0.15  },  // weighted composite
+const SUB_BASELINES = {
+  mas:       { mean: 0.316, std: 0.020 },   // range ~0.27-0.37
+  mav:       { mean: 0.471, std: 0.045 },   // range ~0.35-0.60
+  mami:      { mean: 7.35,  std: 0.50  },   // range ~6.0-9.0
+  sizeScore: { mean: 2.04,  std: 0.08  },   // range ~1.85-2.30
 }
 
 /**
  * Normalize a raw value to 0-10 scale using z-score.
- * score = 5.0 + z × 2.5, clamped [1.0, 10.0]
+ * score = 5.0 + z × 2.0, clamped [1.0, 10.0]
  */
-function normalizeToScale(value, baseline) {
+function norm(value, baseline) {
   if (value == null || !baseline || baseline.std === 0) return null
   const z = (value - baseline.mean) / baseline.std
-  return Math.max(1.0, Math.min(10.0, 5.0 + z * 2.5))
+  return Math.max(1.0, Math.min(10.0, 5.0 + z * 2.0))
 }
 
 /**
  * Full athletic computation for a single player.
  *
- * @param {object} meas - measurables row (height, weight, wingspan, vertical,
- *   max_vertical, three_quarter_sprint, lane_agility, shuttle, bench, standing_reach)
- * @returns {object} { mas_sqrt, mav, mami, oai, aaa, oai_raw, aaa_raw }
+ * Steps:
+ *   1. Compute raw sub-metrics (MAS, MAV, MAMI, SizeScore)
+ *   2. Normalize each to 0-10 via z-score
+ *   3. Combine normalized scores into OAI and AAA
+ *
+ * @param {object} meas - measurables row
+ * @returns {object|null} { mas_sqrt, mav, mami, oai, aaa }
  */
 export function computeAthleticScores(meas) {
   if (!meas) return null
@@ -129,19 +106,36 @@ export function computeAthleticScores(meas) {
   const sprint = meas.three_quarter_sprint
   const agility = meas.lane_agility || meas.shuttle
 
-  // Compute sub-metrics
+  // 1. Compute raw sub-metrics
   const masRaw = computeMAS(weight, sprint)
   const mavRaw = computeMAV(vert, height, weight)
   const mamiRaw = computeMAMI(height, weight, agility)
-  const sizeScoreRaw = computeSizeScore(height, wingspan)
+  const sizeRaw = computeSizeScore(height, wingspan)
 
-  // Compute raw composites
-  const oaiRaw = computeRawOAI(masRaw, mavRaw, mamiRaw)
-  const aaaRaw = computeRawAAA(oaiRaw, mamiRaw, sizeScoreRaw)
+  // 2. Normalize each to 0-10
+  const masNorm = norm(masRaw, SUB_BASELINES.mas)
+  const mavNorm = norm(mavRaw, SUB_BASELINES.mav)
+  const mamiNorm = norm(mamiRaw, SUB_BASELINES.mami)
+  const sizeNorm = norm(sizeRaw, SUB_BASELINES.sizeScore)
 
-  // Normalize to 0-10 scale
-  const oai = round(normalizeToScale(oaiRaw, RAW_BASELINES.oai))
-  const aaa = round(normalizeToScale(aaaRaw, RAW_BASELINES.aaa))
+  // Need at least one athletic sub-metric
+  if (masNorm == null && mavNorm == null && mamiNorm == null) return null
+
+  // 3. Compute OAI from normalized sub-metrics
+  //    OAI = norm(MAS) × 0.4 + norm(MAV) × 0.4 + norm(MAMI) × 0.2
+  let oaiTotal = 0, oaiWeight = 0
+  if (masNorm != null)  { oaiTotal += masNorm * 0.4;  oaiWeight += 0.4 }
+  if (mavNorm != null)  { oaiTotal += mavNorm * 0.4;  oaiWeight += 0.4 }
+  if (mamiNorm != null) { oaiTotal += mamiNorm * 0.2; oaiWeight += 0.2 }
+  const oai = oaiWeight > 0 ? round(oaiTotal / oaiWeight) : null
+
+  // 4. Compute AAA from OAI + MAMI + SizeScore (all already on 0-10)
+  //    AAA = OAI × 0.6 + norm(MAMI) × 0.2 + norm(SizeScore) × 0.2
+  let aaaTotal = 0, aaaWeight = 0
+  if (oai != null)      { aaaTotal += oai * 0.6;       aaaWeight += 0.6 }
+  if (mamiNorm != null) { aaaTotal += mamiNorm * 0.2;  aaaWeight += 0.2 }
+  if (sizeNorm != null) { aaaTotal += sizeNorm * 0.2;  aaaWeight += 0.2 }
+  const aaa = aaaWeight > 0 ? round(aaaTotal / aaaWeight) : null
 
   return {
     mas_sqrt: round(masRaw),
@@ -149,8 +143,6 @@ export function computeAthleticScores(meas) {
     mami: round(mamiRaw),
     oai,
     aaa,
-    oai_raw: round(oaiRaw),
-    aaa_raw: round(aaaRaw),
   }
 }
 
