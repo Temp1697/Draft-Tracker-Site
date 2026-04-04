@@ -16,6 +16,7 @@ import { computeSkillMetrics, computePTC } from './skillmetrics.js'
 import { computeAutoSSAGrades } from './ssaauto.js'
 import { getPositionalDefaults } from '../positionalDefaults.js'
 import { fillDefaultsSync } from '../fillDefaults.js'
+import { computeAthleticScores, ATHLETIC_DEFAULTS } from './athletic.js'
 
 /**
  * Run full recalculation for all players.
@@ -58,28 +59,58 @@ export async function recalculateAll(onProgress) {
   const measMap = new Map(measurables.map(r => [r.player_id, r]))
 
   // -----------------------------------------------------------------------
-  // 1b. Auto-fill athletic_scores with positional averages for players
-  //     who have no athletic data (e.g., historical/legendary archive players)
+  // 1b. Compute OAI/AAA from measurables for all players
+  //     - Players WITH raw combine data: compute from formulas
+  //     - Players WITHOUT measurables: fill positional average (5.0/5.0)
   // -----------------------------------------------------------------------
-  const POSITIONAL_ATHLETIC_DEFAULTS = {
-    Guard: { oai: 5.0, aaa: 5.0, oai_band: 'Average Burst', aaa_band: 'Average Physical' },
-    Wing:  { oai: 5.0, aaa: 5.0, oai_band: 'Average Burst', aaa_band: 'Average Physical' },
-    Big:   { oai: 5.0, aaa: 5.0, oai_band: 'Average Burst', aaa_band: 'Average Physical' },
-  }
+  progress('Computing athletic scores (OAI/AAA)...')
+
+  // Fetch full measurables for athletic computation
+  const { data: fullMeasForAthletic } = await supabase.from('measurables').select('*')
+  const fullMeasForAthMap = new Map((fullMeasForAthletic || []).map(r => [r.player_id, r]))
 
   const athleticUpserts = []
+  let computedCount = 0, defaultCount = 0
+
   for (const player of players) {
-    if (!athleticMap.has(player.player_id)) {
-      const defaults = POSITIONAL_ATHLETIC_DEFAULTS[player.primary_bucket] || POSITIONAL_ATHLETIC_DEFAULTS.Wing
-      const entry = { player_id: player.player_id, ...defaults }
-      athleticMap.set(player.player_id, entry)
+    const pid = player.player_id
+    const meas = fullMeasForAthMap.get(pid)
+    const existing = athleticMap.get(pid)
+
+    // Try to compute from raw measurables
+    const computed = computeAthleticScores(meas)
+
+    if (computed && computed.oai != null) {
+      // Successfully computed from measurables
+      const entry = {
+        player_id: pid,
+        mas_sqrt: computed.mas_sqrt,
+        mav: computed.mav,
+        mami: computed.mami,
+        oai: computed.oai,
+        aaa: computed.aaa,
+      }
+      athleticMap.set(pid, entry)
       athleticUpserts.push(entry)
+      computedCount++
+    } else if (!existing || existing.oai == null) {
+      // No measurables and no existing scores — use positional default
+      const defaults = ATHLETIC_DEFAULTS[player.primary_bucket] || ATHLETIC_DEFAULTS.Wing
+      const entry = {
+        player_id: pid,
+        oai: defaults.oai,
+        aaa: defaults.aaa,
+      }
+      athleticMap.set(pid, entry)
+      athleticUpserts.push(entry)
+      defaultCount++
     }
   }
+
   if (athleticUpserts.length > 0) {
     const { error: athErr } = await supabase.from('athletic_scores').upsert(athleticUpserts, { onConflict: 'player_id' })
-    if (athErr) errors.push(`Athletic defaults upsert: ${athErr.message}`)
-    else progress(`  Athletic defaults: ${athleticUpserts.length} players filled with positional averages`)
+    if (athErr) errors.push(`Athletic scores upsert: ${athErr.message}`)
+    else progress(`  Athletic: ${computedCount} computed from measurables, ${defaultCount} filled with positional averages`)
   }
 
   // -----------------------------------------------------------------------
