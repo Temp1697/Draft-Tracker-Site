@@ -438,9 +438,34 @@ export async function recalculateAll(onProgress) {
     })
   }
 
-  // Sort by composite and assign ranks
-  masterUpdates.sort((a, b) => (b.composite_score ?? 0) - (a.composite_score ?? 0))
-  masterUpdates.forEach((row, i) => { row.overall_rank = i + 1 })
+  // Sort by composite and assign ranks — separate active prospects from historical
+  // Build a set of active prospect IDs (draft_status === 'prospect' or current class)
+  const playerMap = new Map(players.map(p => [p.player_id, p]))
+  const activeUpdates = masterUpdates.filter(r => {
+    const p = playerMap.get(r.player_id)
+    return p?.draft_status === 'prospect' || !p?.draft_status
+  })
+  const historicalUpdates = masterUpdates.filter(r => {
+    const p = playerMap.get(r.player_id)
+    return p?.draft_status && p.draft_status !== 'prospect'
+  })
+
+  // Rank active prospects for the Big Board
+  activeUpdates.sort((a, b) => (b.composite_score ?? 0) - (a.composite_score ?? 0))
+  activeUpdates.forEach((row, i) => { row.overall_rank = i + 1 })
+
+  // Rank historical players within their own draft class
+  const byClass = {}
+  for (const row of historicalUpdates) {
+    const p = playerMap.get(row.player_id)
+    const cls = p?.draft_class || 'unknown'
+    if (!byClass[cls]) byClass[cls] = []
+    byClass[cls].push(row)
+  }
+  for (const cls of Object.keys(byClass)) {
+    byClass[cls].sort((a, b) => (b.composite_score ?? 0) - (a.composite_score ?? 0))
+    byClass[cls].forEach((row, i) => { row.overall_rank = i + 1 })
+  }
 
   if (masterUpdates.length > 0) {
     // Batch upsert in chunks of 50
