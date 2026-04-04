@@ -43,9 +43,9 @@ function assignBand(percentile, bands) {
   return bands[bands.length - 1].label
 }
 
-function computeAgeScore(birthYear) {
+function computeAgeScore(birthYear, draftYear) {
   if (birthYear == null) return null
-  const age = 2026 - birthYear
+  const age = (draftYear && draftYear < 2026) ? draftYear - birthYear : 2026 - birthYear
   return Math.max(0, Math.min(10, 26 - age))
 }
 
@@ -58,8 +58,8 @@ function computeAgeScore(birthYear) {
  *
  * @param {number|null} ageCurveScore - if provided, use this instead of computing from birthYear
  */
-export function computeComposite(rausFinal, ssa, aaa, oai, birthYear, ageCurveScore, sizeMultiplier, ageMultiplier) {
-  const ageScore = ageCurveScore ?? computeAgeScore(birthYear)
+export function computeComposite(rausFinal, ssa, aaa, oai, birthYear, ageCurveScore, sizeMultiplier, ageMultiplier, draftYear) {
+  const ageScore = ageCurveScore ?? computeAgeScore(birthYear, draftYear)
 
   // Determine which components are available
   const hasOAI = oai != null && oai > 0
@@ -173,9 +173,9 @@ export function computeSizeMultiplier(heightInches, bucket) {
 // ---------------------------------------------------------------------------
 // Task 20: Age Multiplier for Composite
 // ---------------------------------------------------------------------------
-export function computeAgeMultiplier(birthYear) {
+export function computeAgeMultiplier(birthYear, draftYear) {
   if (birthYear == null) return 1.0
-  const age = 2026 - birthYear
+  const age = (draftYear && draftYear < 2026) ? draftYear - birthYear : 2026 - birthYear
   if (age <= 17) return 1.10
   if (age === 18) return 1.06
   if (age === 19) return 1.02

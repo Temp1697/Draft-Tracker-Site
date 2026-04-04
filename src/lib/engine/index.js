@@ -58,6 +58,31 @@ export async function recalculateAll(onProgress) {
   const measMap = new Map(measurables.map(r => [r.player_id, r]))
 
   // -----------------------------------------------------------------------
+  // 1b. Auto-fill athletic_scores with positional averages for players
+  //     who have no athletic data (e.g., historical/legendary archive players)
+  // -----------------------------------------------------------------------
+  const POSITIONAL_ATHLETIC_DEFAULTS = {
+    Guard: { oai: 5.0, aaa: 5.0, oai_band: 'Average Burst', aaa_band: 'Average Physical' },
+    Wing:  { oai: 5.0, aaa: 5.0, oai_band: 'Average Burst', aaa_band: 'Average Physical' },
+    Big:   { oai: 5.0, aaa: 5.0, oai_band: 'Average Burst', aaa_band: 'Average Physical' },
+  }
+
+  const athleticUpserts = []
+  for (const player of players) {
+    if (!athleticMap.has(player.player_id)) {
+      const defaults = POSITIONAL_ATHLETIC_DEFAULTS[player.primary_bucket] || POSITIONAL_ATHLETIC_DEFAULTS.Wing
+      const entry = { player_id: player.player_id, ...defaults }
+      athleticMap.set(player.player_id, entry)
+      athleticUpserts.push(entry)
+    }
+  }
+  if (athleticUpserts.length > 0) {
+    const { error: athErr } = await supabase.from('athletic_scores').upsert(athleticUpserts, { onConflict: 'player_id' })
+    if (athErr) errors.push(`Athletic defaults upsert: ${athErr.message}`)
+    else progress(`  Athletic defaults: ${athleticUpserts.length} players filled with positional averages`)
+  }
+
+  // -----------------------------------------------------------------------
   // 2. Compute skill metrics from stats + PTC from conference
   // -----------------------------------------------------------------------
   progress('Computing skill metrics from stats...')
@@ -272,9 +297,11 @@ export async function recalculateAll(onProgress) {
     }
 
     // Age modifier: younger gets a bump
+    // For historical players, use draft year instead of current year
     let ageMod = 1.0
     if (player.birth_year != null) {
-      const age = 2026 - player.birth_year
+      const draftYr = player.draft_class ? parseInt(player.draft_class) : null
+      const age = (draftYr && draftYr < 2026) ? draftYr - player.birth_year : 2026 - player.birth_year
       // 18 → 1.05, 19 → 1.025, 20 → 1.0, 21 → 0.975, 22 → 0.95
       ageMod = 1 + (20 - age) * 0.025
       ageMod = Math.max(0.9, Math.min(1.15, ageMod))
@@ -351,18 +378,20 @@ export async function recalculateAll(onProgress) {
     const prevStats = priorStatsMap.get(pid)
 
     // Age curve: compute age-adjusted SSA and age curve score for composite
+    // For historical players, use draft year to compute age-at-draft
+    const draftYr = player.draft_class ? parseInt(player.draft_class) : null
     const { adjusted: ssaAdjusted, class_multiplier, improvement_delta } =
-      computeAgeAdjustedScore(ssaRaw, prospect?.class, player.birth_year, curStats, prevStats)
-    const ageCurve = computeAgeCurveScore(prospect?.class, player.birth_year, curStats, prevStats)
+      computeAgeAdjustedScore(ssaRaw, prospect?.class, player.birth_year, curStats, prevStats, draftYr)
+    const ageCurve = computeAgeCurveScore(prospect?.class, player.birth_year, curStats, prevStats, draftYr)
 
     // Task 19: Size multiplier from prospect height vs position prototype
     const sizeMultiplier = computeSizeMultiplier(prospect?.height, player.primary_bucket)
 
     // Task 20: Age multiplier (separate from SSA age modifier)
-    const ageMultiplier = computeAgeMultiplier(player.birth_year)
+    const ageMultiplier = computeAgeMultiplier(player.birth_year, draftYr)
 
     // Use age-adjusted SSA in composite, age curve score replaces simple age factor
-    const { composite } = computeComposite(rausFinal, ssaAdjusted ?? ssaRaw, aaa, oai, null, ageCurve.score, sizeMultiplier, ageMultiplier)
+    const { composite } = computeComposite(rausFinal, ssaAdjusted ?? ssaRaw, aaa, oai, null, ageCurve.score, sizeMultiplier, ageMultiplier, draftYr)
     const tier = assignTier(rausFinal)
 
     masterUpdates.push({

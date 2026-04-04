@@ -34,13 +34,13 @@ function classMultiplierByAge(age) {
  * @param {number|null} birthYear - for age-based interpolation
  * @returns {number} multiplier (0.85 – 1.15)
  */
-export function getClassMultiplier(playerClass, birthYear) {
+export function getClassMultiplier(playerClass, birthYear, draftYear) {
   if (playerClass && CLASS_MULTIPLIERS[playerClass] != null) {
     return CLASS_MULTIPLIERS[playerClass]
   }
   // International or unknown — use age
   if (birthYear != null) {
-    const age = 2026 - birthYear
+    const age = (draftYear && draftYear < 2026) ? draftYear - birthYear : 2026 - birthYear
     return classMultiplierByAge(age)
   }
   return 1.00
@@ -90,10 +90,10 @@ export function computeImprovementVelocity(current, prior) {
  * @param {object|null} priorStats - previous season
  * @returns {{ adjusted: number, class_multiplier: number, improvement_delta: number|null }}
  */
-export function computeAgeAdjustedScore(rawScore, playerClass, birthYear, currentStats, priorStats) {
+export function computeAgeAdjustedScore(rawScore, playerClass, birthYear, currentStats, priorStats, draftYear) {
   if (rawScore == null) return { adjusted: null, class_multiplier: null, improvement_delta: null }
 
-  const classMult = getClassMultiplier(playerClass, birthYear)
+  const classMult = getClassMultiplier(playerClass, birthYear, draftYear)
   const impDelta = computeImprovementVelocity(currentStats, priorStats)
 
   const adjusted = round(rawScore * classMult * (1 + (impDelta ?? 0)))
@@ -115,8 +115,8 @@ export function computeAgeAdjustedScore(rawScore, playerClass, birthYear, curren
  *
  * @returns {number} 0-10 score
  */
-export function computeAgeCurveScore(playerClass, birthYear, currentStats, priorStats) {
-  const classMult = getClassMultiplier(playerClass, birthYear)
+export function computeAgeCurveScore(playerClass, birthYear, currentStats, priorStats, draftYear) {
+  const classMult = getClassMultiplier(playerClass, birthYear, draftYear)
   const impDelta = computeImprovementVelocity(currentStats, priorStats)
 
   // Map 0.85–1.15 → 0–10
