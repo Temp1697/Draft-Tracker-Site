@@ -28,7 +28,7 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       const [
-        { data: b }, { data: p }, { data: a }, { data: ath }, { data: ssa }, { data: st },
+        { data: b }, { data: p }, { data: a }, { data: ath }, { data: ssa }, { data: st }, { data: pl },
       ] = await Promise.all([
         supabase.from('master_board').select('*').order('overall_rank'),
         supabase.from('prospects').select('player_id, class, team'),
@@ -36,13 +36,16 @@ export default function Dashboard() {
         supabase.from('athletic_scores').select('player_id, oai, aaa'),
         supabase.from('ssa_scores').select('player_id, ssa_auto_final'),
         supabase.from('stats').select('player_id'),
+        supabase.from('players').select('player_id, draft_status'),
       ])
-      setBoard(b || [])
+      // Filter to active prospects only (exclude historical/legendary archive players)
+      const activeIds = new Set((pl || []).filter(p => p.draft_status === 'prospect' || !p.draft_status).map(p => p.player_id))
+      setBoard((b || []).filter(r => activeIds.has(r.player_id)))
       setProspects(p || [])
       setAlerts(a || [])
-      setAthletic(ath || [])
-      setSSA(ssa || [])
-      setStats(st || [])
+      setAthletic((ath || []).filter(r => activeIds.has(r.player_id)))
+      setSSA((ssa || []).filter(r => activeIds.has(r.player_id)))
+      setStats((st || []).filter(r => activeIds.has(r.player_id)))
       setLoading(false)
     }
     load()
@@ -139,9 +142,13 @@ export default function Dashboard() {
       })
       setRecalcStatus(result)
       if (result.success) {
-        // Reload board data
-        const { data: b } = await supabase.from('master_board').select('*').order('overall_rank')
-        if (b) setBoard(b)
+        // Reload board data — active prospects only
+        const [{ data: b }, { data: pl }] = await Promise.all([
+          supabase.from('master_board').select('*').order('overall_rank'),
+          supabase.from('players').select('player_id, draft_status'),
+        ])
+        const activeIds = new Set((pl || []).filter(p => p.draft_status === 'prospect' || !p.draft_status).map(p => p.player_id))
+        if (b) setBoard(b.filter(r => activeIds.has(r.player_id)))
       }
     } catch (err) {
       setRecalcStatus({ success: false, errors: [err.message], playerCount: 0 })
