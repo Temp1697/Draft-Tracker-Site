@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 const CLASS_MULTIPLIERS = {
+  hs: 1.15,
   fr: 1.15,
   so: 1.05,
   jr: 1.00,
@@ -35,8 +36,21 @@ function classMultiplierByAge(age) {
  * @returns {number} multiplier (0.85 – 1.15)
  */
 export function getClassMultiplier(playerClass, birthYear, draftYear) {
-  if (playerClass && CLASS_MULTIPLIERS[playerClass] != null) {
-    return CLASS_MULTIPLIERS[playerClass]
+  if (playerClass) {
+    // Direct match first
+    if (CLASS_MULTIPLIERS[playerClass] != null) {
+      return CLASS_MULTIPLIERS[playerClass]
+    }
+    // Normalize common full names to abbreviations
+    const normalized = playerClass.toLowerCase().trim()
+    const CLASS_ALIASES = {
+      'freshman': 'fr', 'sophomore': 'so', 'junior': 'jr', 'senior': 'sr',
+      'high school': 'hs', 'highschool': 'hs', 'graduate': 'grad', '5th year': '5th',
+    }
+    const alias = CLASS_ALIASES[normalized] || normalized
+    if (CLASS_MULTIPLIERS[alias] != null) {
+      return CLASS_MULTIPLIERS[alias]
+    }
   }
   // International or unknown — use age
   if (birthYear != null) {

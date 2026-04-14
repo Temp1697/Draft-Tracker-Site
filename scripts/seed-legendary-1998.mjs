@@ -232,7 +232,7 @@ const PLAYERS = [
   },
   {
     pick: 25, team: 'Indiana Pacers', name: 'Al Harrington', school: 'St. Patrick High School', pos: 'SF/PF',
-    birthYear: 1980, height: 81, weight: 230, wingspan: 84, conf: null,
+    birthYear: 1980, height: 81, weight: 230, wingspan: 84, conf: 'High School', classYear: 'hs',
     archetype: 'Stretch Big',
     // High school player — no college stats; used estimated high school/AAU profile
     stats: null,
@@ -350,7 +350,7 @@ async function seed() {
       height: p.height,
       weight: p.weight,
       wingspan: p.wingspan,
-      class: 'Senior',
+      class: p.classYear || 'Senior',
     })
 
     // 3. Stats table

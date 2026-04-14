@@ -1029,7 +1029,7 @@ export default function ScoutingCard() {
                 {isEstimated('ws_minus_h') && <span className="sc-est-marker">~</span>}
               </span>
             )}
-            {prospect?.class && <span className="sc-class">{prospect.class.toUpperCase()}</span>}
+            {prospect?.class && <span className="sc-class">{prospect.class.toLowerCase() === 'hs' ? 'HIGH SCHOOL' : prospect.class.toUpperCase()}</span>}
             {player.birth_year && player.draft_class && player.draft_status !== 'prospect' && parseInt(player.draft_class) <= new Date().getFullYear() ? (
               <span>Age {parseInt(player.draft_class) - player.birth_year} at draft</span>
             ) : player.birth_year ? (

@@ -5,20 +5,16 @@
 // position-weighted SSA scores with age and wingspan-height modifiers.
 // ---------------------------------------------------------------------------
 
+import { getSSAGradeLabel } from '../tiers.js'
+
 const SSA_WEIGHTS = {
   Guard: { role: 1.1, shooting: 1.2, creation: 1.3, playmaking: 1.3, defense: 0.8, offball: 0.8, decision: 1.2, hustle: 0.3 },
   Wing:  { role: 1.2, shooting: 1.1, creation: 1.1, playmaking: 0.7, defense: 1.2, offball: 1.1, decision: 1.0, hustle: 0.6 },
   Big:   { role: 1.1, shooting: 0.8, creation: 0.8, playmaking: 0.6, defense: 1.4, offball: 1.2, decision: 0.9, hustle: 1.2 },
 }
 
-const SSA_RANK_LABELS = [
-  { min: 9.0,  label: 'Top 3 Pick' },
-  { min: 8.25, label: 'Lottery (4-14)' },
-  { min: 7.25, label: 'Mid-Late 1st' },
-  { min: 6.75, label: '2nd Round' },
-  { min: 6.25, label: 'Bench/Specialist' },
-  { min: -Infinity, label: 'Fringe/Two-Way' },
-]
+// SSA_RANK_LABELS removed — grade labels are now the single source of truth
+// in src/lib/tiers.js (SSA_TIERS / getSSAGradeLabel). Do not re-add here.
 
 const SSA_WEIGHTED_RANK_LABELS = [
   { min: 8.75, label: 'Elite Statistical Résumé' },
@@ -103,7 +99,7 @@ export function computeSSA(input, bucket, ageMod = 1.0, wsHMod = 1.0) {
     age_mod: round(ageMod),
     ws_h_mod: round(wsHMod),
     ssa_auto_final: ssaAutoFinal,
-    ssa_rank_label: getLabel(ssaAutoFinal, SSA_RANK_LABELS),
+    ssa_rank_label: getSSAGradeLabel(ssaAutoFinal),
     ssa_weighted: ssaWeighted,
     ssa_weighted_rank_label: getLabel(ssaWeighted, SSA_WEIGHTED_RANK_LABELS),
   }

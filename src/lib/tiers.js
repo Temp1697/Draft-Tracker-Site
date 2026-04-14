@@ -58,21 +58,32 @@ export function rausTier(rausFinal) {
 }
 
 // ---- SSA Tiers -----------------------------------------------------------
+// SINGLE SOURCE OF TRUTH for SSA → grade label mapping.
+// Thresholds and label strings MUST stay in sync with ssa.js (which imports
+// getSSAGradeLabel from here). Do NOT add a second label table anywhere else.
 export const SSA_TIERS = [
-  { min: 8.50, label: 'Elite Prospect',     color: '#DFFF00' },
-  { min: 7.50, label: 'Lottery Talent',     color: '#2DD4BF' },
-  { min: 6.50, label: 'First Round Grade',  color: '#34D399' },
-  { min: 5.80, label: 'Second Round Grade', color: '#60A5FA' },
-  { min: 5.00, label: 'Fringe Prospect',    color: '#FBBF24' },
-  { min: -Infinity, label: 'Undrafted Grade', color: '#F87171' },
+  { min: 8.50,      label: 'Elite Prospect',     color: '#DFFF00' },
+  { min: 7.50,      label: 'Lottery Talent',     color: '#2DD4BF' },
+  { min: 6.50,      label: 'First Round Grade',  color: '#34D399' },
+  { min: 5.80,      label: 'Second Round Grade', color: '#60A5FA' },
+  { min: 5.00,      label: 'Fringe Prospect',    color: '#FBBF24' },
+  { min: -Infinity, label: 'Undrafted Grade',    color: '#F87171' },
 ]
 
+/** Returns the full tier object { min, label, color } for a given SSA score. */
 export function ssaTier(ssaFinal) {
   if (ssaFinal == null) return null
   for (const t of SSA_TIERS) {
     if (ssaFinal >= t.min) return t
   }
   return SSA_TIERS[SSA_TIERS.length - 1]
+}
+
+/** Returns just the grade label string — use this wherever only the text is needed. */
+export function getSSAGradeLabel(score) {
+  if (score == null) return null
+  const tier = ssaTier(score)
+  return tier ? tier.label : null
 }
 
 // ---- Big Board Composite Tiers -------------------------------------------

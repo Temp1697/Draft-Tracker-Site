@@ -458,6 +458,7 @@ const PTC_MAP = {
   // Below college level
   'JUCO':            0.95,
   'Prep':            0.95,
+  'High School':     0.95,
 }
 
 /**

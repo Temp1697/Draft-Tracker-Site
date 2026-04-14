@@ -24,7 +24,7 @@ function bucket(pos) {
 const PLAYERS = [
   {
     pick: 1, team: 'Cleveland Cavaliers', name: 'LeBron James', school: 'St. Vincent-St. Mary HS', pos: 'SF',
-    birthYear: 1984, height: 80, weight: 240, wingspan: 84, conf: 'Prep',
+    birthYear: 1984, height: 80, weight: 240, wingspan: 84, conf: 'High School', classYear: 'hs',
     archetype: 'Point Forward',
     // HS Senior Season: 31.6 PPG, 9.6 RPG, 4.6 APG
     stats: { games: 25, mpg: 32.0, ppg: 31.6, rpg: 9.6, apg: 4.6, spg: 2.8, bpg: 1.0, tov: 3.5, pf: 2.0, fg_pct: 0.560, three_pt_pct: 0.380, ft_pct: 0.730, pts_per40: 39.5, reb_per40: 12.0, ast_per40: 5.8, stl_per40: 3.5, blk_per40: 1.3, tov_per40: 4.4, usg: 0.350, per: 35.0, bpm: 15.0, obpm: 10.0, dbpm: 5.0, ws: 10.0, efg_pct: 0.585, ts_pct: 0.620, ast_pct: 0.230, tov_pct: 0.120, stl_pct: 0.058, blk_pct: 0.025, orb_pct: 0.055, drb_pct: 0.200, drtg: 92.0 },
@@ -162,7 +162,7 @@ const PLAYERS = [
   },
   {
     pick: 20, team: 'Minnesota Timberwolves', name: 'Ndudi Ebi', school: 'Westbury Christian HS', pos: 'SF',
-    birthYear: 1984, height: 81, weight: 210, wingspan: 86, conf: 'Prep',
+    birthYear: 1984, height: 81, weight: 210, wingspan: 86, conf: 'High School', classYear: 'hs',
     archetype: 'Slasher Wing',
     stats: { games: 20, mpg: 28.0, ppg: 18.0, rpg: 8.0, apg: 1.5, spg: 1.5, bpg: 1.5, tov: 3.0, pf: 2.5, fg_pct: 0.480, three_pt_pct: 0.280, ft_pct: 0.650, pts_per40: 25.7, reb_per40: 11.4, ast_per40: 2.1, stl_per40: 2.1, blk_per40: 2.1, tov_per40: 4.3, usg: 0.280, per: 18.0, bpm: 3.0, obpm: 1.0, dbpm: 2.0, ws: 3.0, efg_pct: 0.495, ts_pct: 0.525, ast_pct: 0.080, tov_pct: 0.170, stl_pct: 0.035, blk_pct: 0.042, orb_pct: 0.055, drb_pct: 0.155, drtg: 100.0 },
     nba: { ppg: 0.5, rpg: 0.5, apg: 0.1, spg: 0.1, bpg: 0.1, ws48: -0.20, outcome: 'Bust' },
@@ -177,7 +177,7 @@ const PLAYERS = [
   },
   {
     pick: 24, team: 'Boston Celtics', name: 'Kendrick Perkins', school: 'Clifton J. Ozen HS', pos: 'C',
-    birthYear: 1984, height: 82, weight: 280, wingspan: 86, conf: 'Prep',
+    birthYear: 1984, height: 82, weight: 280, wingspan: 86, conf: 'High School', classYear: 'hs',
     archetype: 'Paint Anchor',
     stats: { games: 20, mpg: 26.0, ppg: 14.0, rpg: 10.0, apg: 1.0, spg: 0.5, bpg: 3.0, tov: 2.0, pf: 3.5, fg_pct: 0.560, three_pt_pct: null, ft_pct: 0.580, pts_per40: 21.5, reb_per40: 15.4, ast_per40: 1.5, stl_per40: 0.8, blk_per40: 4.6, tov_per40: 3.1, usg: 0.240, per: 20.0, bpm: 4.0, obpm: -0.5, dbpm: 4.5, ws: 3.0, efg_pct: 0.560, ts_pct: 0.570, ast_pct: 0.055, tov_pct: 0.135, stl_pct: 0.013, blk_pct: 0.090, orb_pct: 0.095, drb_pct: 0.235, drtg: 93.0 },
     nba: { ppg: 5.4, rpg: 5.8, apg: 0.5, spg: 0.4, bpg: 0.9, ws48: 0.104, outcome: 'Starter' },
@@ -265,7 +265,7 @@ async function seed() {
       height: p.height,
       weight: p.weight,
       wingspan: p.wingspan,
-      class: p.birthYear <= 1981 ? 'Senior' : p.birthYear <= 1983 ? 'Sophomore' : 'Freshman',
+      class: p.classYear || (p.birthYear <= 1981 ? 'Senior' : p.birthYear <= 1983 ? 'Sophomore' : 'Freshman'),
     })
 
     if (p.stats) {

@@ -127,7 +127,7 @@ const PLAYERS = [
   },
   {
     pick: 13, team: 'Charlotte Hornets', name: 'Kobe Bryant', school: 'Lower Merion HS', pos: 'SG',
-    birthYear: 1978, height: 78, weight: 200, wingspan: 83, conf: 'PIAA',
+    birthYear: 1978, height: 78, weight: 200, wingspan: 83, conf: 'High School', classYear: 'hs',
     archetype: 'Two Way Star Wing',
     // 1995-96 Lower Merion HS senior season (translated/estimated NBA-equivalent stats)
     // Actual HS: 30.8 PPG, 12.0 RPG, 6.5 APG — scaled to reflect college equivalent level
@@ -160,7 +160,7 @@ const PLAYERS = [
   },
   {
     pick: 17, team: 'Portland Trail Blazers', name: 'Jermaine O\'Neal', school: 'Eau Claire HS', pos: 'PF/C',
-    birthYear: 1978, height: 83, weight: 235, wingspan: 89, conf: 'South Carolina HS',
+    birthYear: 1978, height: 83, weight: 235, wingspan: 89, conf: 'High School', classYear: 'hs',
     archetype: 'Paint Anchor',
     // 1995-96 HS senior — translated/estimated stats
     // Actual HS: 22.4 PPG, 14.3 RPG, 5.4 BPG — scaled to reflect college equivalent
@@ -313,7 +313,7 @@ async function seed() {
       height: p.height,
       weight: p.weight,
       wingspan: p.wingspan,
-      class: 'Senior',
+      class: p.classYear || 'Senior',
     })
 
     // 3. Stats table

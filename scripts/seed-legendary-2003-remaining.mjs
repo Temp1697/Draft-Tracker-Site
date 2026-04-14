@@ -115,7 +115,7 @@ const PLAYERS = [
   },
   {
     pick: 37, team: 'Portland Trail Blazers', name: 'Travis Outlaw', school: 'Starkville HS', pos: 'SF',
-    birthYear: 1984, height: 81, weight: 205, wingspan: 85, conf: 'Prep',
+    birthYear: 1984, height: 81, weight: 205, wingspan: 85, conf: 'High School', classYear: 'hs',
     archetype: 'Slasher Wing',
     stats: { games: 20, mpg: 26.0, ppg: 22.0, rpg: 8.0, apg: 2.0, spg: 1.8, bpg: 1.5, tov: 3.0, pf: 2.5, fg_pct: 0.460, three_pt_pct: 0.300, ft_pct: 0.670, pts_per40: 33.8, reb_per40: 12.3, ast_per40: 3.1, stl_per40: 2.8, blk_per40: 2.3, tov_per40: 4.6, usg: 0.290, per: 19.0, bpm: 4.5, obpm: 1.5, dbpm: 3.0, ws: 3.0, efg_pct: 0.480, ts_pct: 0.530, ast_pct: 0.100, tov_pct: 0.165, stl_pct: 0.045, blk_pct: 0.045, orb_pct: 0.065, drb_pct: 0.175, drtg: 97.5 },
     nba: { ppg: 8.0, rpg: 3.5, apg: 0.8, spg: 0.6, bpg: 0.5, ws48: 0.058, outcome: 'Role Player' },
@@ -307,7 +307,7 @@ async function seed() {
       height: p.height,
       weight: p.weight,
       wingspan: p.wingspan,
-      class: p.birthYear <= 1981 ? 'Senior' : p.birthYear <= 1983 ? 'Sophomore' : 'Freshman',
+      class: p.classYear || (p.birthYear <= 1981 ? 'Senior' : p.birthYear <= 1983 ? 'Sophomore' : 'Freshman'),
     })
 
     if (p.stats) {
