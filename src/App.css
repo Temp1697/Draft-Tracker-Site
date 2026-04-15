@@ -487,9 +487,86 @@ body {
 .sc-sw-strength { background: rgba(45, 212, 191, 0.08); border-left: 3px solid #2DD4BF; color: rgba(255,255,255,0.85); }
 .sc-sw-weakness { background: rgba(248, 113, 113, 0.08); border-left: 3px solid #F87171; color: rgba(255,255,255,0.85); }
 
-/* Historical Comps */
-.sc-comps-card { margin-bottom: 16px; }
+/* Statistical Comp */
+.sc-stat-comp-card { margin-bottom: 16px; }
 
+.sc-stat-comp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+.sc-stat-comp-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.95);
+  margin-bottom: 4px;
+}
+.sc-stat-comp-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 4px;
+}
+.sc-match-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.sc-recalc-btn {
+  font-size: 14px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #1a1f30;
+  color: rgba(255,255,255,0.55);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sc-recalc-btn:hover { color: #fff; border-color: #555; }
+
+/* 1 of 1 card */
+.sc-one-of-one-card {
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #0e1120 0%, #141828 100%);
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+.sc-one-of-one-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  text-align: center;
+}
+.sc-one-of-one-diamond {
+  font-size: 32px;
+  color: #DFFF00;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 0 12px #DFFF0060);
+}
+.sc-one-of-one-label {
+  font-size: 36px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  color: rgba(255,255,255,0.95);
+  margin-bottom: 16px;
+}
+.sc-one-of-one-sub {
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  max-width: 380px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+/* ---- keep sc-comps-grid for any lingering usages ---- */
 .sc-comps-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -585,23 +662,7 @@ body {
   padding: 6px 0;
 }
 
-/* Shades of... Comps */
-.sc-shades-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.sc-shade-card { background: #1C2236; border: 1px solid #242C45; border-radius: 8px; padding: 16px; text-align: center; }
-.sc-shade-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.sc-shade-label { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
-.sc-shade-actions { display: flex; gap: 4px; align-items: center; }
-.sc-shade-manual-tag { font-size: 9px; padding: 2px 5px; border-radius: 3px; background: #3B82F6; color: #fff; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
-.sc-shade-btn { font-size: 10px; padding: 3px 8px; border-radius: 4px; border: 1px solid #444; background: #252545; color: #aaa; cursor: pointer; }
-.sc-shade-btn:hover { background: #333366; color: #fff; }
-.sc-shade-btn-reset { border-color: #F87171; color: #F87171; }
-.sc-shade-btn-reset:hover { background: #F8717120; color: #F87171; }
-.sc-shade-reset-all { display: block; margin: 12px auto 0; font-size: 11px; padding: 6px 16px; border-radius: 6px; border: 1px solid #F87171; background: transparent; color: #F87171; cursor: pointer; }
-.sc-shade-reset-all:hover { background: #F8717120; }
-.sc-shade-name { font-size: 18px; font-weight: 700; color: rgba(255,255,255,0.95); margin-bottom: 4px; }
-.sc-shade-meta { display: flex; justify-content: center; gap: 12px; font-size: 12px; color: rgba(255,255,255,0.5); margin-bottom: 10px; }
-.sc-shade-stats { display: flex; justify-content: center; gap: 12px; font-size: 13px; color: rgba(255,255,255,0.75); font-weight: 500; }
-.sc-shade-similarity { margin-top: 8px; }
+/* Shades Of styles removed — replaced by Statistical Comp (sc-stat-comp-*) */
 
 .sc-notes-textarea {
   width: 100%;

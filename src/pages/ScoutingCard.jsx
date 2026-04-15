@@ -14,7 +14,7 @@ import { rausTier, ssaTier, compositeTier, lciTier, wshTier, starIndexTier, ppiT
 import { getPositionalDefaults } from '../lib/positionalDefaults'
 import { fillDefaultsSync } from '../lib/fillDefaults'
 import { pctConvert } from '../lib/engine/skillmetrics'
-import CompSwapModal from '../components/CompSwapModal'
+import StatCompSection from '../components/StatCompSection'
 
 /* ── Constants for detail panels ── */
 
@@ -825,10 +825,6 @@ export default function ScoutingCard() {
   const [loading, setLoading] = useState(true)
   const [rausDetailsOpen, setRausDetailsOpen] = useState(false)
   const [ssaDetailsOpen, setSsaDetailsOpen] = useState(false)
-  const [compSwapOpen, setCompSwapOpen] = useState(false)
-  const [compSwapSlot, setCompSwapSlot] = useState(null) // 'star' | 'average' | 'bust'
-  const [manualComps, setManualComps] = useState({}) // { star: hp, average: hp, bust: hp }
-
   useEffect(() => {
     async function load() {
       const [
@@ -844,7 +840,6 @@ export default function ScoutingCard() {
         { data: stats },
         { data: alerts },
         { data: derived },
-        { data: comps },
         { data: injuries },
       ] = await Promise.all([
         supabase.from('players').select('*').eq('player_id', playerId).single(),
@@ -859,7 +854,6 @@ export default function ScoutingCard() {
         supabase.from('stats').select('*').eq('player_id', playerId).order('season', { ascending: false }),
         supabase.from('player_alerts').select('*').eq('player_id', playerId),
         supabase.from('derived_metrics').select('*').eq('player_id', playerId).single(),
-        supabase.from('player_comps').select('*, historical_players(*)').eq('player_id', playerId).order('similarity_distance'),
         supabase.from('player_injuries').select('*').eq('player_id', playerId).order('injury_date', { ascending: false }),
       ])
 
@@ -882,90 +876,16 @@ export default function ScoutingCard() {
         filledMeasurables = fm
       } catch { /* defaults table may not exist yet */ }
 
-      setData({ player, prospect, raus, ssa, ssaInput, athletic, measurables: filledMeasurables, master, dna, stats: filledStats, alerts: alerts || [], derived, comps: comps || [], injuries: injuries || [], estimatedFields })
+      setData({ player, prospect, raus, ssa, ssaInput, athletic, measurables: filledMeasurables, master, dna, stats: filledStats, alerts: alerts || [], derived, injuries: injuries || [], estimatedFields })
       setLoading(false)
     }
     load()
   }, [playerId])
 
-  // Load manual comp overrides from DB
-  useEffect(() => {
-    if (!playerId) return
-    supabase
-      .from('player_comps')
-      .select('comp_slot, historical_players(*)')
-      .eq('player_id', playerId)
-      .eq('is_manual', true)
-      .then(({ data: manuals }) => {
-        if (!manuals || manuals.length === 0) return
-        const overrides = {}
-        for (const m of manuals) {
-          if (m.comp_slot && m.historical_players) {
-            overrides[m.comp_slot] = m.historical_players
-          }
-        }
-        setManualComps(overrides)
-      })
-  }, [playerId])
-
-  async function handleCompSwap(historicalPlayer) {
-    const slot = compSwapSlot
-    setCompSwapOpen(false)
-    if (!slot || !historicalPlayer) return
-
-    // Save to database
-    // First remove any existing manual override for this slot
-    await supabase
-      .from('player_comps')
-      .delete()
-      .eq('player_id', playerId)
-      .eq('comp_slot', slot)
-      .eq('is_manual', true)
-
-    // Insert new manual override
-    await supabase
-      .from('player_comps')
-      .insert({
-        player_id: playerId,
-        historical_player_id: historicalPlayer.id,
-        comp_slot: slot,
-        is_manual: true,
-        comp_tier: historicalPlayer.tier || 'modern',
-        similarity_distance: 0,
-      })
-
-    setManualComps(prev => ({ ...prev, [slot]: historicalPlayer }))
-  }
-
-  async function handleResetComp(slot) {
-    await supabase
-      .from('player_comps')
-      .delete()
-      .eq('player_id', playerId)
-      .eq('comp_slot', slot)
-      .eq('is_manual', true)
-
-    setManualComps(prev => {
-      const next = { ...prev }
-      delete next[slot]
-      return next
-    })
-  }
-
-  async function handleResetAllComps() {
-    await supabase
-      .from('player_comps')
-      .delete()
-      .eq('player_id', playerId)
-      .eq('is_manual', true)
-
-    setManualComps({})
-  }
-
   if (loading) return <div className="bb-loading">Loading scouting card...</div>
   if (!data?.player) return <div className="bb-loading">Player not found</div>
 
-  const { player, prospect, raus, ssa, ssaInput, athletic, measurables, master, dna, stats, alerts, derived, comps, injuries, estimatedFields = [] } = data
+  const { player, prospect, raus, ssa, ssaInput, athletic, measurables, master, dna, stats, alerts, derived, injuries, estimatedFields = [] } = data
   const isEstimated = (field) => estimatedFields.includes(field)
   const currentStats = stats[0]
   const sizeMultiplier = computeSizeMultiplier(prospect?.height, player.primary_bucket)
@@ -1219,104 +1139,11 @@ export default function ScoutingCard() {
         </div>
       </div>
 
-      {/* Shades of... Historical Comps */}
-      {comps.length > 0 && (
-        <div className="sc-card sc-comps-card" style={{ gridColumn: '1 / -1' }}>
-          <h3 className="sc-section-title">Shades of...</h3>
-          <div className="sc-shades-grid">
-            {(() => {
-              const outcomeOrder = {
-                'MVP': 0, 'All-NBA': 1, 'All-Star': 2, 'Starter': 3,
-                'Role Player': 4, 'Out of League': 5, 'Bust': 6,
-              }
-              const sorted = [...comps]
-                .filter(c => c.historical_players && !c.is_manual)
-                .sort((a, b) => {
-                  const aO = outcomeOrder[a.historical_players.nba_outcome_label] ?? 3
-                  const bO = outcomeOrder[b.historical_players.nba_outcome_label] ?? 3
-                  return aO - bO
-                })
-
-              const autoStar = sorted[0]?.historical_players
-              const autoBust = sorted[sorted.length - 1]?.historical_players
-              const autoAvg = sorted[Math.floor(sorted.length / 2)]?.historical_players
-              const autoSimStar = sorted[0]?.similarity_distance
-              const autoSimAvg = sorted[Math.floor(sorted.length / 2)]?.similarity_distance
-              const autoSimBust = sorted[sorted.length - 1]?.similarity_distance
-
-              const shades = [
-                { label: 'The Star', slot: 'star', icon: '⭐', hp: manualComps.star || autoStar, isManual: !!manualComps.star, simDist: manualComps.star ? null : autoSimStar, color: '#DFFF00' },
-                { label: 'The Average', slot: 'average', icon: '📊', hp: manualComps.average || autoAvg, isManual: !!manualComps.average, simDist: manualComps.average ? null : autoSimAvg, color: '#60A5FA' },
-                { label: 'The Bust', slot: 'bust', icon: '📉', hp: manualComps.bust || autoBust, isManual: !!manualComps.bust, simDist: manualComps.bust ? null : autoSimBust, color: '#F87171' },
-              ].filter(s => s.hp)
-
-              if (shades.length === 0) return <div className="sc-section-empty">No historical comps available</div>
-
-              return shades.map(shade => {
-                const hp = shade.hp
-                if (!hp) return null
-                const stkpg = ((hp.spg_first4 ?? 0) + (hp.bpg_first4 ?? 0)).toFixed(1)
-                return (
-                  <div key={shade.label} className="sc-shade-card" style={{ borderColor: shade.color + '40' }}>
-                    <div className="sc-shade-header">
-                      <span className="sc-shade-label" style={{ color: shade.color }}>{shade.label}</span>
-                      <div className="sc-shade-actions">
-                        {shade.isManual && (
-                          <span className="sc-shade-manual-tag">Manual</span>
-                        )}
-                        <button
-                          className="sc-shade-btn"
-                          onClick={() => { setCompSwapSlot(shade.slot); setCompSwapOpen(true) }}
-                        >Swap</button>
-                        {shade.isManual && (
-                          <button
-                            className="sc-shade-btn sc-shade-btn-reset"
-                            onClick={() => handleResetComp(shade.slot)}
-                          >Reset</button>
-                        )}
-                      </div>
-                    </div>
-                    <div className="sc-shade-name">{hp.name}</div>
-                    <div className="sc-shade-meta">
-                      {hp.draft_year && <span>Draft {hp.draft_year}</span>}
-                      {hp.draft_pick && <span>Pick #{hp.draft_pick}</span>}
-                      {hp.position && <span>{hp.position}</span>}
-                    </div>
-                    <div className="sc-shade-stats">
-                      {hp.nba_ppg_first4 != null && <span>{Number(hp.nba_ppg_first4).toFixed(1)} PPG</span>}
-                      {hp.rpg_first4 != null && <span>{Number(hp.rpg_first4).toFixed(1)} RPG</span>}
-                      {hp.apg_first4 != null && <span>{Number(hp.apg_first4).toFixed(1)} APG</span>}
-                      <span>{stkpg} STKPG</span>
-                      {hp.nba_ws48_first4 != null && <span>{Number(hp.nba_ws48_first4).toFixed(3)} WS/48</span>}
-                    </div>
-                    <div className="sc-shade-similarity">
-                      <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)' }}>
-                        {hp.nba_outcome_label && <span style={{ marginRight: 8 }}>{hp.nba_outcome_label}</span>}
-                        {shade.simDist != null && (
-                          <>Similarity: {Math.max(0, (100 - shade.simDist * 10)).toFixed(0)}%</>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })
-            })()}
-          </div>
-          {Object.keys(manualComps).length > 0 && (
-            <button
-              className="sc-shade-reset-all"
-              onClick={handleResetAllComps}
-            >Reset All Comps to Auto</button>
-          )}
-        </div>
-      )}
-
-      <CompSwapModal
-        open={compSwapOpen}
-        onClose={() => setCompSwapOpen(false)}
-        onSelect={handleCompSwap}
-        currentPlayerId={playerId}
-        currentComps={comps}
+      {/* Statistical Comp */}
+      <StatCompSection
+        player={player}
+        currentStats={currentStats}
+        measurables={measurables}
       />
 
       {/* DNA Archetypes */}
